@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Picks y parlays de NBA y fútbol basados en probabilidades del modelo, comparados contra los momios de las casas" />
+    <title>Gorgo Predictions</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%234f46e5'/><path d='M68 36a22 22 0 1 0 4 22H52' stroke='white' stroke-width='9' fill='none' stroke-linecap='round'/></svg>" />
+    <script>
+      // Aplica el tema y el deporte antes del primer pintado para evitar el parpadeo.
+      try {
+        var t = localStorage.getItem("gorgo.theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+        // Mismo orden que useSportContext: la ruta, luego ?deporte= en Historial y Rendimiento, luego el último usado.
+        var path = location.pathname;
+        var q = new URLSearchParams(location.search).get("deporte");
+        var s = path.indexOf("/nba") === 0 ? "nba" : path.indexOf("/futbol") === 0 ? "futbol"
+          : (path === "/historial" || path === "/rendimiento") && (q === "nba" || q === "futbol") ? q
+          : JSON.parse(localStorage.getItem("gorgo.sport") || '"futbol"');
+        if (s === "nba" || s === "futbol") document.documentElement.dataset.sport = s;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      # 5435 en el host: 5433 y 5434 son de GorgoNBAParlays y GorgoPredictionsV3, que siguen corriendo hasta el corte.
+      - "${POSTGRES_HOST_PORT:-5435}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Comandos bajo demanda: docker compose run --rm app <comando>
+  app:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["cli"]
+
+  # Recolección automática de los dos deportes (cada deporte aislado). Se enciende en el corte, después del
+  # 21-oct-2026, junto con la web: docker compose --profile servicio up -d --build
+  scheduler:
+    build: ./backend
+    command: ["scheduler"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["servicio"]
+
+  # Interfaz web + API: http://localhost:8300 (perfil "servicio", como el scheduler). Antes del corte, para
+  # probarla sin arriesgar apuestas reales en V4, se usa la API local (ver README).
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    ports:
+      # 8300 en el host: 8100 y 8200 son de GorgoNBAParlays y GorgoPredictionsV3.
+      - "${WEB_HOST_PORT:-8300}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["servicio"]
+
+volumes:
+  pgdata:

@@ -1,0 +1,154 @@
+# GorgoPredictions V4 — NBA y fútbol
+
+Picks y parlays de **NBA** y **fútbol** en una sola plataforma: une
+[GorgoNBAParlays](../GorgoNBAParlays) (API-Basketball) y [GorgoPredictionsV3](../GorgoPredictionsV3)
+(API-Football, 15 competiciones). Plan completo, fases y decisiones: [docs/PLAN_UNION.md](docs/PLAN_UNION.md).
+
+## Estado
+
+| Fase | Estado |
+|---|---|
+| 0. Base (docs, reglas, Docker) | ✅ |
+| 1. Base de datos y núcleo común; motores de NBA y fútbol portados | ✅ |
+| 2. CLI y scheduler únicos | ✅ un ciclo real contra las dos APIs el 6-oct (sync, liquidación y registro) |
+| 3. API (`/api/nba`, `/api/futbol` y rutas comunes) | ✅ |
+| 4. Interfaz | ✅ un solo sitio para los dos deportes, con boleto mixto |
+| 5. Importación del historial y paridad | ✅ ensayo completo; la importación definitiva se repite en el corte |
+| 6. Corte | decidido: después del 21-oct-2026 |
+
+Hasta el corte, los proyectos anteriores siguen siendo los oficiales (picks, liquidación y **tus apuestas**).
+Todo lo que se registre en V4 antes del corte se borra en la importación final.
+
+## Requisitos
+
+- Docker Desktop
+- Python 3.13 (entorno virtual en `.venv`) y Node 20 (interfaz)
+- Archivo `.env` en la raíz (copiar de `.env.example`; la llave de api-sports es la misma de los proyectos anteriores)
+
+## Arranque
+
+```bash
+docker compose up -d db                                   # PostgreSQL en localhost:5435
+py -3.13 -m venv .venv
+.venv/Scripts/python -m pip install -r backend/requirements.txt
+npm --prefix frontend install
+```
+
+En el corte (después del 21-oct-2026) se encienden el scheduler y la web en Docker:
+`docker compose --profile servicio up -d --build` → interfaz y API en `http://localhost:8300`. Antes del corte no se
+encienden: lo que se registre en V4 (incluidas tus apuestas) se borra con la importación final.
+
+## Comandos
+
+Desde `backend/` con `../.venv/Scripts/python -m app.cli <comando>` (o `docker compose run --rm app <comando>`).
+Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos deportes donde aplica.
+
+| Comando | Qué hace |
+|---|---|
+| `migrate` | Crea/actualiza el esquema |
+| `summary` | Filas por tabla |
+| `import-legacy [--replace]` | Historial de los dos proyectos anteriores (sólo los lee) |
+| `parity --sport X [--date D]…` | Compara el motor de V4 con el del proyecto anterior para los mismos días y datos |
+| `status [--sport X]` | Plan y consumo de cada API (no gasta cuota) |
+| `sync [--sport X]` | Temporada en curso: partidos, estadísticas, bajas y momios |
+| `odds` · `injuries [--sport X]` | Sólo momios · sólo bajas (NBA: reporte oficial; fútbol: API) |
+| `lineups [--minutes 90]` | Fútbol: alineaciones de lo que empieza pronto |
+| `backfill --sport nba [--season YYYY-YYYY]` · `backfill --sport futbol [--seasons …] [--league ID]` | Temporadas completas |
+| `picks --sport X [--date D] [--bookmaker Bet365\|1xBet\|best]` | Piernas y parlays de un día (texto) |
+| `record-picks --sport X [--date D]` | Guarda piernas y parlays de un día (lo hace el scheduler) |
+| `settle [--sport X]` | Liquida piernas, parlays y tus apuestas (lo hace el scheduler) |
+| `performance --sport nba [--include-preseason]` · `--sport futbol [--league ID]` | Rendimiento real |
+| `backtest --sport X [--start --end --every N --teams-only]` | Evalúa los modelos día por día |
+| `scheduler [--sport X]` | Sincroniza, liquida y registra picks periódicamente |
+
+API local (desde `backend/`): `../.venv/Scripts/python -m uvicorn app.api.main:app --port 8301 --reload`;
+documentación en `http://localhost:8301/api/docs`. Rutas de cada deporte en `/api/nba/*` y `/api/futbol/*`;
+comunes en `/api/meta`, `/api/bets` (boleto mixto), `/api/history[.csv]?sport=` y `/api/performance?sport=`.
+Si existe `frontend/dist` (`npm --prefix frontend run build`), la misma API sirve la interfaz en `http://localhost:8301`.
+
+Interfaz en desarrollo: `npm --prefix frontend run dev` → `http://localhost:5173` (manda `/api` a la API local del
+puerto 8301).
+
+Pruebas:
+
+- Backend (desde `backend/`, contra PostgreSQL real): `../.venv/Scripts/python -m pytest`.
+- Interfaz: `npm --prefix frontend test` (lógica de parlays, boleto, preferencias y momios) y
+  `npm --prefix frontend run build` (tipos estrictos + compilación).
+
+## Cómo está armado
+
+```
+backend/app/
+├── core/            # lo común: parlays, registro y liquidación de picks, tus apuestas, evidencia, ingesta
+├── sports/
+│   ├── nba/         # modelos, ingesta (API-Basketball + reporte de lesiones) y su contrato (sport.py)
+│   └── futbol/      # modelos, ingesta (API-Football) y su contrato (sport.py)
+├── scheduler.py     # un solo ciclo para los dos deportes; cada deporte corre aislado
+├── legacy_import.py # importación del historial de los proyectos anteriores
+├── parity.py        # comparación con los proyectos anteriores
+└── cli.py
+```
+
+```
+frontend/src/
+├── components/      # lo común: encabezado (NBA | Fútbol), boleto mixto, piernas, parlays sugeridos, personalizar
+├── sports/
+│   ├── nba/         # config.ts (mercados, estadísticas, etiquetas), tarjeta de partido, bajas, Día
+│   └── futbol/      # config.ts, tarjeta de partido, bajas, Día y Jornada (jornada o rango de fechas)
+├── pages/           # Historial, Mis apuestas y Rendimiento (con filtro de deporte)
+└── lib/             # API, preferencias por deporte, boleto, armado de parlays, formatos
+```
+
+- La interfaz es una sola: `/nba`, `/futbol`, `/futbol/jornada`, `/historial`, `/mis-apuestas`, `/rendimiento`.
+  El boleto acepta piernas de los dos deportes; cada deporte guarda sus preferencias (mercados, ligas, mínimos) y
+  tu casa de apuestas es común. El color de acento cambia con el deporte (naranja NBA, índigo fútbol).
+- Los modelos e ingestas de cada deporte se copiaron casi textuales de su proyecto (sólo cambian los imports y los
+  nombres de tabla, ahora con esquema). Cómo decide cada motor: ver "Cómo decide el motor" en el README de
+  [GorgoNBAParlays](../GorgoNBAParlays/README.md) y de [GorgoPredictionsV3](../GorgoPredictionsV3/README.md).
+- Lo que estaba duplicado (armar y congelar parlays, guardar y liquidar piernas, tus apuestas, resumen de evidencia)
+  vive una sola vez en `core/`, y cada deporte aporta lo suyo con el contrato `app/core/sport.py`.
+
+### Paridad comprobada (6-oct-2026)
+
+Con los mismos datos (`import-legacy --replace` y luego `parity`), V4 da exactamente las mismas piernas,
+probabilidades, momios y proyecciones que los proyectos anteriores (diferencia máxima 0):
+
+| Deporte | Días | Partidos | Piernas |
+|---|---|---:|---:|
+| NBA | 7, 10 y 21 de octubre (pretemporada, internacionales y temporada regular) | 23 | 15,398 |
+| Fútbol | 7, 10 y 18 de octubre | 105 | 29,742 |
+
+Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían registrado para el 7-oct
+(3,010 piernas y 4 parlays de NBA; 1,330 piernas y 10 parlays de fútbol, sin una sola diferencia).
+
+## Base de datos
+
+- `nba`: tablas de NBA tal como estaban en GorgoNBAParlays (IDs de API-Basketball).
+- `futbol`: tablas de fútbol tal como estaban en GorgoPredictionsV3 (IDs de API-Football).
+- `core`: lo que cruza deportes. `core.matches` da a cada partido una identidad común (los IDs de los dos proveedores
+  chocan entre sí), y `core.picks`, `core.parlays` y `core.user_bets` se refieren a él: un boleto puede mezclar NBA y
+  fútbol.
+
+### Importación del historial (`import-legacy`)
+
+- Lee cada base anterior en una transacción de sólo lectura (foto consistente aunque su scheduler siga escribiendo)
+  y escribe todo en V4 en una sola transacción: si algo falla, no queda nada a medias.
+- Antes de escribir comprueba que las tablas y columnas de origen sean exactamente las esperadas; al final compara
+  conteos y huellas de los valores de cada tabla contra la foto de origen.
+- Las ingestas, picks, parlays y apuestas se renumeran (sus IDs chocaban entre proyectos); la correspondencia queda en
+  `core.legacy_ids`. Las marcas de tiempo se conservan: son la evidencia de "registrado antes del partido".
+- Con datos en V4 se niega a escribir encima; `--replace` borra lo de V4 y vuelve a importar (ensayos y corte).
+- La conexión a cada base sale del `.env` de su proyecto (`LEGACY_NBA_ENV`, `LEGACY_FUTBOL_ENV`) o de una URL directa
+  (`LEGACY_NBA_DATABASE_URL`, `LEGACY_FUTBOL_DATABASE_URL`).
+
+Los archivos locales de los proyectos anteriores (muestras de la API, reportes y backtests) están copiados en
+`data/nba` y `data/futbol` (no versionados).
+
+## Documentación técnica
+
+- [Plan de unión](docs/PLAN_UNION.md)
+- [Python y PostgreSQL con Psycopg 3](docs/database/psycopg.md)
+- APIs: [API-Basketball](docs/apis/API_Basketball_1_5_endpoints.md) ([campos verificados](docs/apis/API_Basketball_campos_verificados.md)),
+  [API-Football](docs/apis/API_FOOTBALL_3_9_3_endpoints.md) ([campos verificados](docs/apis/API_Football_campos_verificados.md))
+- Interfaz: [guía maestra UI/UX](docs/guidelines/guia_maestra_ui_ux_para_codex.md),
+  [catálogo de patrones](docs/guidelines/catalogo_patrones_ui_ux_para_codex.md)

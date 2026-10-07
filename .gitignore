@@ -1,0 +1,15 @@
+# Secretos
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Datos locales
+data/
+*.sqlite3
+
+# Configuración local del preview
+.claude/launch.json

@@ -1,0 +1,12 @@
+# Nunca enviar secretos ni dependencias locales al contexto de Docker.
+.env
+.env.*
+!.env.example
+.git
+.venv
+data
+**/__pycache__
+**/.pytest_cache
+frontend/node_modules
+frontend/dist
+.claude
