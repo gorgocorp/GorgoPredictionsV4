@@ -13,11 +13,12 @@ Picks y parlays de **NBA** y **fútbol** en una sola plataforma: une
 | 2. CLI y scheduler únicos | ✅ un ciclo real contra las dos APIs el 6-oct (sync, liquidación y registro) |
 | 3. API (`/api/nba`, `/api/futbol` y rutas comunes) | ✅ |
 | 4. Interfaz | ✅ un solo sitio para los dos deportes, con boleto mixto |
-| 5. Importación del historial y paridad | ✅ ensayo completo; la importación definitiva se repite en el corte |
-| 6. Corte | decidido: después del 21-oct-2026 |
+| 5. Importación del historial y paridad | ✅ importación final en el corte: 18/18 tablas por deporte, paridad idéntica |
+| 6. Corte | ✅ 6-oct-2026: V4 es el sistema oficial |
 
-Hasta el corte, los proyectos anteriores siguen siendo los oficiales (picks, liquidación y **tus apuestas**).
-Todo lo que se registre en V4 antes del corte se borra en la importación final.
+Desde la noche del 6-oct-2026 V4 es el sistema oficial: sincroniza, registra picks, liquida y guarda **tus apuestas**
+(interfaz en `http://localhost:8300`). Los dos proyectos anteriores quedaron apagados como archivo, sin borrar nada; no
+se vuelven a prender (su scheduler duplicaría la cuota de la API).
 
 ## Requisitos
 
@@ -34,9 +35,8 @@ py -3.13 -m venv .venv
 npm --prefix frontend install
 ```
 
-En el corte (después del 21-oct-2026) se encienden el scheduler y la web en Docker:
-`docker compose --profile servicio up -d --build` → interfaz y API en `http://localhost:8300`. Antes del corte no se
-encienden: lo que se registre en V4 (incluidas tus apuestas) se borra con la importación final.
+El servicio completo (base, scheduler y web) corre en Docker: `docker compose --profile servicio up -d --build` →
+interfaz y API en `http://localhost:8300`. Los contenedores se reinician solos con Docker Desktop.
 
 ## Comandos
 

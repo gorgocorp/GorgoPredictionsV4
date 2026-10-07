@@ -4,6 +4,9 @@
 >
 > Fuentes, **sólo lectura** (no se modifican sus archivos ni sus bases):
 > `GorgoNBAParlays` @ `6d16326` y `GorgoPredictionsV3` @ `0791500` (6-oct-2026).
+>
+> **Corte hecho la noche del 6-oct-2026** (ver §10): V4 es el sistema oficial y los dos proyectos anteriores
+> quedaron apagados como archivo, sin borrar nada. Lo que sigue en §1–§9 es el plan tal como se hizo.
 
 ## 1. Diagnóstico
 
@@ -285,32 +288,56 @@ Ensayo del 6-oct-2026 (foto de las 19:30 hora del centro, ~80 s, todo cuadró):
 
 | Fase | Entrega | Aceptación (evidencia) |
 |---|---|---|
-| 0. Base ✅ | `git init`, docs consolidados, `CLAUDE.md`, `.env.example`, compose (base en 5435) | Hecho el 6-oct; `scheduler` y `web` ya están en el compose con el perfil `servicio` (se encienden en el corte) |
+| 0. Base ✅ | `git init`, docs consolidados, `CLAUDE.md`, `.env.example`, compose (base en 5435) | Hecho el 6-oct; `scheduler` y `web` en el compose con el perfil `servicio` (encendidos en el corte) |
 | 1. Datos + núcleo ✅ | Migraciones `core`/`nba`/`futbol`; `core/*` extraído; los dos deportes portados al contrato | Hecho el 6-oct: `migrate` en base vacía; los archivos de pruebas de los dos proyectos portados (salvo `slate_range`, que vuelve con la API) + pruebas de `core`, del esquema y de integración del registro y la liquidación: 172 pruebas pasan |
 | 2. CLI + scheduler ✅ | `gorgo … --sport`, scheduler único | `status` y un ciclo real del scheduler contra las dos APIs el 6-oct (sync NBA 37 solicitudes, fútbol 41; liquidación y registro de 7 días); pruebas de `next_runs` con partidos de ambos; un deporte que falla no detiene al otro |
 | 3. API ✅ | Routers `/api/nba`, `/api/futbol` + rutas comunes (`meta`, `bets`, `history[.csv]`, `performance`) | Todas las rutas probadas contra la base real de V4; pruebas automáticas con base de prueba (boleto mixto por HTTP, jornada y rango, historial por deporte, CSV, rendimiento): 179 pruebas pasan |
 | 4. Interfaz ✅ | Encabezado, páginas por deporte, boleto mixto, Historial y Rendimiento con filtro | Hecho el 6-oct: `npm test` 37 pruebas (las de los dos proyectos portadas + preferencias por deporte y boleto mixto), `tsc` estricto y `npm run build` sin errores; revisada en el navegador contra la base real: día de fútbol y de NBA, jornada, boleto con piernas de los dos deportes, Historial (todos/NBA), Mis apuestas, Rendimiento de los dos (580 piernas NBA liquidadas con pretemporada), claro/oscuro y móvil (375 px) sin desbordes |
-| 5. Importación + paridad ✅ | `import-legacy` y `parity` | Conteos y huellas cuadran; **paridad** el 6-oct: NBA (7, 10 y 21-oct, 15,398 piernas) y fútbol (7, 10 y 18-oct, 29,742 piernas) idénticos, diferencia máxima 0; `record-picks` reprodujo lo registrado para el 7-oct (4,340 piernas y 14 parlays). Se repite antes del corte |
-| 6. Corte | V4 en paralelo → detienes los schedulers viejos → importación final → V4 solo | Una corrida completa de V4 sin errores; los proyectos viejos quedan intactos como archivo |
+| 5. Importación + paridad ✅ | `import-legacy` y `parity` | Conteos y huellas cuadran; **paridad** el 6-oct: NBA (7, 10 y 21-oct, 15,398 piernas) y fútbol (7, 10 y 18-oct, 29,742 piernas) idénticos, diferencia máxima 0; `record-picks` reprodujo lo registrado para el 7-oct (4,340 piernas y 14 parlays). Repetidas en el corte (§10) |
+| 6. Corte ✅ | V4 en paralelo → detienes los schedulers viejos → importación final → V4 solo | Hecho el 6-oct a las 23:00 (§10): importación final 18/18 tablas por deporte, paridad IGUALES, primera corrida de V4 sin errores y con los mismos picks que acababan de registrar los proyectos anteriores; éstos quedaron intactos como archivo |
 | 7. Después de la paridad | Vista "Hoy" con los dos deportes, parlays mixtos sugeridos, rango de fechas también para NBA, rendimiento combinado | Cada una con sus pruebas |
 
 ## 9. Riesgos y fechas
 
-- **20-oct-2026**: vence el plan de API-Football (hay que renovarlo, con o sin corte) y debuta la NBA (20 y 21-oct).
-  El scheduler de V4 aísla cada deporte para que un plan vencido no tumbe al otro. Ver §10 sobre la fecha del corte.
+- **20-oct-2026**: vence el plan de API-Football (hay que renovarlo) y debuta la NBA (20 y 21-oct), ya con V4.
+  El scheduler de V4 aísla cada deporte para que un plan vencido no tumbe al otro.
 - **6-nov-2026**: vence el plan de API-Basketball.
-- **Cuota**: misma llave. Mientras V4 y un proyecto viejo sincronicen el mismo deporte, el consumo se duplica
-  (hoy ~500/día NBA y ~250–400 fútbol, de 7,500 cada uno): cabe, pero hasta el corte V4 sólo debería sincronizar
-  para pruebas.
+- **Cuota**: misma llave. Desde el corte, en esta computadora sólo V4 sincroniza (~500/día NBA y ~250–400 fútbol, de
+  7,500 cada uno); si un proyecto viejo volviera a prenderse con su scheduler, el consumo se duplicaría. La versión 1
+  publicada en gorgopredictions.com usa la misma llave de API-Football (~3,700 solicitudes el 7-oct): cuenta para el
+  límite diario de fútbol.
 - **Memoria**: un proceso web con los dos historiales (el de fútbol ronda el medio millón de filas): caché por
   deporte y carga perezosa.
 - **Paridad de modelos**: el riesgo principal es romper un modelo al portarlo; por eso la Fase 5 compara contra los
   proyectos actuales antes del corte.
 - **"Hoy" de NBA**: pasa de hora del Este a `LOCAL_TIMEZONE`; sólo cambia entre la medianoche ET y la de CDMX.
-- **Tarea programada** `revision-debut-nba-2026` (21-oct): apunta al proyecto NBA (8100). Si el corte es antes,
-  hay que apuntarla a V4 (8300).
+- **Tarea programada** `revision-debut-nba-2026` (21-oct, 11:00): actualizada en el corte para revisar V4 (8300, base
+  5435); tiene prohibido prender los proyectos anteriores y revisa también si venció el plan de fútbol.
 
-## 10. El corte
+## 10. El corte ✅
+
+Hecho la noche del **6-oct-2026** por decisión del usuario, antes de lo previsto (después del 21-oct): V4 ya estaba
+completo y con la paridad comprobada, y con un solo proyecto encendido es más simple de operar. No había partidos
+hasta el día siguiente (fútbol desde las 16:30 y NBA desde las 17:00 del 7-oct). Pasos, todos con evidencia:
+
+1. Comparación de liquidación pendiente: las 580 piernas NBA del 6-oct que V4 había liquidado coinciden con las del
+   proyecto NBA (0 diferencias) y la apuesta #6 sale perdida en los dos.
+2. Los schedulers y webs de los dos proyectos se detuvieron estando en espera (acababan de terminar su corrida: NBA
+   liquidó 2,574 piernas del 6-oct y registró el 7 y el 8; fútbol registró del 7 al 12).
+3. Importación final (`import-legacy --replace`, foto de las 23:04): 18 de 18 tablas por deporte con huellas iguales;
+   NBA 12,262 picks, 21 parlays, 1 apuesta; fútbol 29,905 picks, 72 parlays, 2 apuestas.
+4. `parity` sobre esos datos: NBA 7-oct (2,903 piernas) y 21-oct (8,557) y fútbol 7-oct (2,037) y 10-oct (17,857),
+   todos IGUALES con diferencia máxima 0.
+5. Se apagaron las bases anteriores y se encendió V4 (`docker compose --profile servicio up -d`). Su primera corrida
+   (NBA 37 solicitudes, fútbol 42) registró exactamente los mismos picks que acababan de registrar los proyectos
+   anteriores (7-oct NBA: 2,903 piernas y 4 parlays; fútbol del 7 al 12: mismas cifras), sin errores.
+6. La tarea programada del 21-oct se apuntó a V4.
+
+**Si hubiera que volver atrás**: los proyectos anteriores están intactos (`docker compose up -d` en cada carpeta). Lo
+registrado en V4 desde el corte (picks, liquidaciones, tus apuestas) no estaría en ellos, y habría que apagar el
+scheduler de V4 para no duplicar la cuota.
+
+Lo que se consideró antes de decidir la fecha:
 
 Es el momento en que V4 pasa a ser el sistema oficial: su scheduler sincroniza, registra picks y liquida, y los
 schedulers de los proyectos anteriores se apagan. No cambia lo que se construye ni lo que se importa (la importación
@@ -338,5 +365,5 @@ delicado.
 ## 11. Decisiones
 
 1. ✅ Historial: se importa todo (6-oct-2026).
-2. ✅ Corte: después del 21-oct-2026 (decidido el 6-oct), en una mañana sin partidos próximos, con V4 completo y la
-   paridad comprobada. Hasta entonces los proyectos anteriores siguen siendo los oficiales.
+2. ✅ Corte: primero se decidió hacerlo después del 21-oct-2026; esa misma noche el usuario decidió adelantarlo y se
+   hizo el 6-oct-2026 a las 23:00, con V4 completo y la paridad comprobada (§10).
