@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { EmptyState, ErrorState, Skeleton } from "../components/States";
 import { api, type CalibrationBin, type ClvSummary, type Performance, type PerformanceFilters } from "../lib/api";
 import { BACKTESTS } from "../lib/backtest";
+import { clvExclusions } from "../lib/clv";
 import { pct, signedPct, signedPts } from "../lib/format";
 import { useSportContext } from "../lib/sportContext";
 import { SPORT_KEYS, SPORTS, type SportConfig } from "../lib/sports";
@@ -97,7 +98,9 @@ function Kpis({ data }: { data: Performance }) {
         <span className="stat-label">CLV de piernas con valor</span>
         <span className={`kpi-value ${clv && clv.avg > 0 ? "ev-pos" : ""}`}>{clv ? signedPct(clv.avg) : "—"}</span>
         <span className="muted xs">
-          {clv ? `${pct(clv.beat_rate)} le ganan al cierre · ${clv.n} piernas` : "Requiere piernas con momio de publicación y cierre"}
+          {clv
+            ? `${pct(clv.beat_rate)} le ganan al cierre · mediana ${signedPct(clv.median)} · ${clv.n} piernas`
+            : "Requiere piernas con momio de publicación y cierre de Pinnacle"}
         </span>
       </div>
     </div>
@@ -106,19 +109,23 @@ function Kpis({ data }: { data: Performance }) {
 
 function ClvSection({ data }: { data: Performance }) {
   const clv = data.clv;
+  const odd = clv?.long_shot_odd ?? 10;
   const rows: [string, ClvSummary | null][] = clv
     ? [
-        ["Con valor al publicarse", clv.value],
-        ["Todas con momio (referencia)", clv.all],
+        [`Con valor al publicarse (momio menor a ${odd})`, clv.value],
+        [`Con valor, momio de ${odd} o más (poco confiable)`, clv.long_shots],
+        [`Todas con momio menor a ${odd} (referencia)`, clv.all],
       ]
     : [];
+  const excluded = clv ? clvExclusions(clv) : [];
   return (
     <section className="card card-pad" aria-labelledby="clv-title">
       <h2 id="clv-title">Valor contra el cierre (CLV)</h2>
       <p className="muted small">
-        Compara el momio con el que se publicó cada pierna contra la probabilidad sin comisión del mercado justo antes del
-        partido (Pinnacle si la cotiza). Positivo = se publicó a mejor precio que el cierre: es la señal más rápida de que
-        el modelo ve algo antes que el mercado, aunque los resultados todavía tengan mucha suerte.
+        Compara el momio con el que se publicó cada pierna contra la probabilidad sin comisión de Pinnacle, la casa de
+        referencia del mercado, en la última lectura antes del partido. Positivo = se publicó a mejor precio que el
+        cierre: es la señal más rápida de que el modelo ve algo antes que el mercado, aunque los resultados todavía
+        tengan mucha suerte.
       </p>
       {!clv ? (
         <p className="muted small">
@@ -130,12 +137,15 @@ function ClvSection({ data }: { data: Performance }) {
             <table className="data">
               <thead>
                 <tr>
-                  <th scope="col">Piernas</th>
+                  <th scope="col">Grupo</th>
                   <th scope="col" className="r">
-                    Con cierre
+                    Piernas
                   </th>
                   <th scope="col" className="r">
                     CLV promedio
+                  </th>
+                  <th scope="col" className="r">
+                    Mediana
                   </th>
                   <th scope="col" className="r">
                     Le ganan al cierre
@@ -151,6 +161,7 @@ function ClvSection({ data }: { data: Performance }) {
                     <td>{label}</td>
                     <td className="r num">{s ? s.n.toLocaleString("es-MX") : 0}</td>
                     <td className={`r num ${s && s.avg > 0 ? "ev-pos" : ""}`}>{s ? signedPct(s.avg) : "—"}</td>
+                    <td className={`r num ${s && s.median > 0 ? "ev-pos" : ""}`}>{s ? signedPct(s.median) : "—"}</td>
                     <td className="r num">{s ? pct(s.beat_rate, 1) : "—"}</td>
                     <td className="r num">{s ? signedPts(s.avg_move) : "—"}</td>
                   </tr>
@@ -160,10 +171,11 @@ function ClvSection({ data }: { data: Performance }) {
           </div>
           <p className="muted xs" style={{ marginBottom: 0 }}>
             {clv.hours_before !== null && `Publicadas ${clv.hours_before.toFixed(1)} h antes del partido (mediana). `}
-            La referencia ronda menos la comisión de la casa porque incluye los dos lados de cada mercado. Mercado a favor =
-            cuánto subió la probabilidad del mercado para esa pierna entre la publicación y el cierre.
-            {clv.without_close > 0 &&
-              ` ${clv.without_close.toLocaleString("es-MX")} piernas no cuentan: su última lectura fue a más de ${clv.close_max_minutes} min del inicio.`}
+            La mediana no la mueven unos cuantos valores extremos. Los momios de {odd} o más van aparte porque su precio
+            justo es poco confiable. La referencia ronda menos la comisión de la casa porque incluye los dos lados de cada
+            mercado. Mercado a favor = cuánto subió la probabilidad de Pinnacle para esa pierna entre la publicación y el
+            cierre.
+            {excluded.length > 0 && ` Con valor pero no cuentan: ${excluded.join(" · ")}.`}
           </p>
         </>
       )}
@@ -195,7 +207,11 @@ function ByMarket({ data, config }: { data: Performance; config: SportConfig }) 
               <th scope="col" className="r">
                 Diferencia
               </th>
-              <th scope="col" className="r">
+              <th
+                scope="col"
+                className="r"
+                title={`Piernas con valor de momio menor a ${data.clv?.long_shot_odd ?? 10}, contra el cierre de Pinnacle`}
+              >
                 CLV con valor
               </th>
             </tr>

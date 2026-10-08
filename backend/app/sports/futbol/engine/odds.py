@@ -166,12 +166,11 @@ class Quote:
     odd: float
 
 
-def market_probabilities(quotes: Iterable[Quote]) -> dict[LegSpec, float]:
-    """Probabilidad sin comisión (devig) de cada selección cuyo mercado está completo.
+def _fair_by_bookmaker(quotes: Iterable[Quote]) -> dict[LegSpec, dict[str, float]]:
+    """Probabilidad sin comisión (devig) de cada selección según cada casa que cotiza su mercado completo.
 
     - Dos resultados (más/menos, sí/no): normaliza el par.
     - 1X2: normaliza los tres; la doble oportunidad sale de sumar dos de ellos.
-    Usa Pinnacle si cotiza el mercado completo; si no, la mediana de las casas que sí.
     """
     quotes = list(quotes)
     by_book: dict[tuple, dict[str, float]] = defaultdict(dict)
@@ -182,7 +181,7 @@ def market_probabilities(quotes: Iterable[Quote]) -> dict[LegSpec, float]:
         by_book[(q.spec.group_key(), q.bookmaker)][q.spec.side] = q.odd
         specs[q.spec.group_key()][q.spec.side] = q.spec
 
-    fair: dict[LegSpec, list[tuple[str, float]]] = defaultdict(list)
+    fair: dict[LegSpec, dict[str, float]] = defaultdict(dict)
     for (group, bookmaker), sides in by_book.items():
         needed = 3 if group[0] == "1x2" else 2
         if len(sides) != needed:
@@ -190,14 +189,33 @@ def market_probabilities(quotes: Iterable[Quote]) -> dict[LegSpec, float]:
         inv = {side: 1 / odd for side, odd in sides.items()}
         total = sum(inv.values())
         for side, value in inv.items():
-            fair[specs[group][side]].append((bookmaker, value / total))
+            fair[specs[group][side]][bookmaker] = value / total
         if group[0] == "1x2":
             p = {side: value / total for side, value in inv.items()}
             for dc, (a, b) in {"1x": ("home", "draw"), "x2": ("draw", "away"), "12": ("home", "away")}.items():
-                fair[LegSpec("dc", dc)].append((bookmaker, p[a] + p[b]))
+                fair[LegSpec("dc", dc)][bookmaker] = p[a] + p[b]
+    return fair
 
-    result = {}
-    for spec, values in fair.items():
-        sharp = [p for book, p in values if book == SHARP_BOOKMAKER]
-        result[spec] = sharp[0] if sharp else statistics.median(p for _, p in values)
-    return result
+
+def market_probabilities(quotes: Iterable[Quote]) -> dict[LegSpec, float]:
+    """Probabilidad del mercado de cada selección cuyo mercado está completo.
+
+    Usa Pinnacle si cotiza el mercado completo; si no, la mediana de las casas que sí.
+    """
+    return {
+        spec: books[SHARP_BOOKMAKER] if SHARP_BOOKMAKER in books else statistics.median(books.values())
+        for spec, books in _fair_by_bookmaker(quotes).items()
+    }
+
+
+def sharp_probabilities(quotes: Iterable[Quote]) -> dict[LegSpec, float]:
+    """Probabilidad sin comisión de Pinnacle, sólo donde cotiza el mercado completo: la referencia del CLV.
+
+    A diferencia de `market_probabilities`, nunca recurre a otras casas: con una sola casa que pone un lado en el
+    mínimo (1.01), el devig da probabilidades muy infladas a los momios altos.
+    """
+    return {
+        spec: books[SHARP_BOOKMAKER]
+        for spec, books in _fair_by_bookmaker(quotes).items()
+        if SHARP_BOOKMAKER in books
+    }

@@ -3,7 +3,9 @@ import math
 import pytest
 
 from app.sports.nba.engine.legs import LegSpec, describe, settle
-from app.sports.nba.engine.odds import Quote, american, market_probabilities, match_player, names_match, parse_selection
+from app.sports.nba.engine.odds import (
+    Quote, american, market_probabilities, match_player, names_match, parse_selection, sharp_probabilities,
+)
 from app.core.parlay import Candidate, ParlayFilters, build_parlay
 from app.sports.nba.engine.picks import book_odds
 from app.sports.nba.engine.player_model import Projection, prob_at_least, prob_at_least_normal
@@ -84,6 +86,16 @@ def test_market_probabilities_prefers_pinnacle_and_removes_vig():
     probs = market_probabilities(quotes)
     assert probs[over] == pytest.approx(0.5)
     assert probs[under] == pytest.approx(0.5)
+
+
+def test_sharp_probabilities_need_both_sides_from_pinnacle():
+    over, under = LegSpec("total", "over", 220.5), LegSpec("total", "under", 220.5)
+    quotes = [Quote(over, "Bet365", 1.80), Quote(under, "Bet365", 2.00), Quote(over, "Pinnacle", 1.95)]
+    # Pinnacle sólo cotiza un lado: el mercado usa Bet365 y no hay referencia para el CLV.
+    assert market_probabilities(quotes)[over] == pytest.approx((1 / 1.8) / (1 / 1.8 + 1 / 2.0))
+    assert sharp_probabilities(quotes) == {}
+    quotes.append(Quote(under, "Pinnacle", 1.95))
+    assert sharp_probabilities(quotes) == pytest.approx({over: 0.5, under: 0.5})
 
 
 def test_book_odds_keeps_configured_bookmakers():

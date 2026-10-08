@@ -130,24 +130,42 @@ export interface ParlayPerformance {
   roi: number | null;
 }
 
-/** CLV de un grupo de piernas: momio de publicación × probabilidad sin comisión del cierre − 1. */
+/** CLV de un grupo de piernas: momio de publicación × probabilidad sin comisión de Pinnacle al cierre − 1. */
 export interface ClvSummary {
   n: number;
   avg: number;
+  median: number;
   beat_rate: number;
   n_move: number;
-  /** Probabilidad del mercado al cierre − al publicarse (null si ninguna la tenía al publicarse). */
+  /** Probabilidad de Pinnacle al cierre − al publicarse (null si ninguna la tenía al publicarse). */
   avg_move: number | null;
 }
 
+/** Por qué no cuenta una pierna con valor, en el orden en que se revisa. */
+export interface ClvExclusions {
+  /** Su última lectura fue a más de `close_max_minutes` del inicio. */
+  no_close: number;
+  /** Pinnacle no cotizaba su mercado completo al cierre. */
+  no_reference: number;
+  /** Publicada a menos de `min_window_hours` del cierre: misma foto de los momios. */
+  short_window: number;
+  /** Su momio de publicación estaba a más de `max_price_gap` del precio justo de ese momento. */
+  doubtful: number;
+}
+
 export interface ClvData {
-  /** Piernas con valor al publicarse (probabilidad del modelo × momio > 1). */
+  /** Piernas con valor al publicarse (probabilidad del modelo × momio > 1) de momio menor a `long_shot_odd`. */
   value: ClvSummary | null;
-  /** Todas las piernas con momio y cierre (referencia: incluye los dos lados de cada mercado). */
+  /** Piernas con valor de momio `long_shot_odd` o más: su precio justo es poco confiable. */
+  long_shots: ClvSummary | null;
+  /** Todas las piernas de momio menor a `long_shot_odd` (referencia: incluye los dos lados de cada mercado). */
   all: ClvSummary | null;
   hours_before: number | null;
-  without_close: number;
+  excluded: ClvExclusions;
   close_max_minutes: number;
+  min_window_hours: number;
+  max_price_gap: number;
+  long_shot_odd: number;
 }
 
 export interface Performance {

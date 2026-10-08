@@ -36,23 +36,25 @@ def _spec_key(spec) -> tuple:
 # el resto se actualiza en cada corrida hasta que empieza el partido.
 UPSERT_PICK = """
 INSERT INTO core.picks (sport, match_id, market, side, line, team, stat, player_id, description, p_model, odd,
-                        bookmaker, p_market, model_version, first_evaluated_at, evaluated_at,
+                        bookmaker, p_market, p_sharp, model_version, first_evaluated_at, evaluated_at,
                         hits_10, games_10, hits_25, games_25, player_status, book_odds,
-                        first_odd, first_p_model, first_p_market, first_priced_at)
+                        first_odd, first_p_model, first_p_market, first_p_sharp, first_priced_at)
 VALUES (%(sport)s, %(match_id)s, %(market)s, %(side)s, %(line)s, %(team)s, %(stat)s, %(player_id)s, %(description)s,
-        %(p_model)s, %(odd)s, %(bookmaker)s, %(p_market)s, %(model_version)s, %(now)s, %(now)s,
+        %(p_model)s, %(odd)s, %(bookmaker)s, %(p_market)s, %(p_sharp)s, %(model_version)s, %(now)s, %(now)s,
         %(hits_10)s, %(games_10)s, %(hits_25)s, %(games_25)s, %(player_status)s, %(book_odds)s,
-        %(first_odd)s, %(first_p_model)s, %(first_p_market)s, %(first_priced_at)s)
+        %(first_odd)s, %(first_p_model)s, %(first_p_market)s, %(first_p_sharp)s, %(first_priced_at)s)
 ON CONFLICT ON CONSTRAINT picks_leg_unique DO UPDATE SET
     first_odd = COALESCE(core.picks.first_odd, EXCLUDED.first_odd),
     first_p_model = CASE WHEN core.picks.first_odd IS NULL THEN EXCLUDED.first_p_model ELSE core.picks.first_p_model END,
     first_p_market = CASE WHEN core.picks.first_odd IS NULL THEN EXCLUDED.first_p_market ELSE core.picks.first_p_market END,
+    first_p_sharp = CASE WHEN core.picks.first_odd IS NULL THEN EXCLUDED.first_p_sharp ELSE core.picks.first_p_sharp END,
     first_priced_at = COALESCE(core.picks.first_priced_at, EXCLUDED.first_priced_at),
     description = EXCLUDED.description,
     p_model = EXCLUDED.p_model,
     odd = EXCLUDED.odd,
     bookmaker = EXCLUDED.bookmaker,
     p_market = EXCLUDED.p_market,
+    p_sharp = EXCLUDED.p_sharp,
     model_version = EXCLUDED.model_version,
     evaluated_at = EXCLUDED.evaluated_at,
     hits_10 = EXCLUDED.hits_10,
@@ -79,6 +81,7 @@ def _first_price_columns(row: dict) -> dict:
         "first_odd": row["odd"],
         "first_p_model": row["p_model"] if priced else None,
         "first_p_market": row["p_market"] if priced else None,
+        "first_p_sharp": row["p_sharp"] if priced else None,
         "first_priced_at": row["now"] if priced else None,
     }
 
@@ -128,6 +131,7 @@ def record_picks(
                 "odd": c.odd,
                 "bookmaker": c.bookmaker,
                 "p_market": None if c.p_market is None else round(c.p_market, 4),
+                "p_sharp": None if c.p_sharp is None else round(c.p_sharp, 4),
                 "model_version": sport.model_version,
                 "now": now,
                 **_hit_columns(c),
@@ -313,53 +317,90 @@ def _settle_parlays(conn: psycopg.Connection, now: datetime) -> int:
 # ---------------------------------------------------------------- rendimiento
 
 CALIBRATION_BINS = np.round(np.arange(0.5, 1.0001, 0.05), 2)
-# El cierre de una pierna es su última evaluación antes del partido (momio y probabilidad del mercado de esa
-# corrida). Sólo cuenta si esa corrida fue a lo más CLOSE_MAX antes del inicio.
+# El cierre de una pierna es su última evaluación antes del partido (momio y probabilidades de esa corrida). Sólo
+# cuenta si esa corrida fue a lo más CLOSE_MAX antes del inicio.
 CLOSE_MAX = timedelta(minutes=90)
+# Entre la publicación y el cierre debe haber al menos MIN_WINDOW: si no, son la misma foto de los momios y no hay
+# movimiento que medir (p. ej. la NBA en pretemporada, con momios sólo una hora antes del partido).
+MIN_WINDOW = timedelta(hours=2)
+# Precio dudoso: el momio de publicación × la probabilidad justa de ese momento se aleja de 1 más que esto. Una
+# diferencia así casi siempre es un dato malo (línea retirada, precio de relleno), no una oportunidad.
+MAX_PRICE_GAP = 0.20
+# Momios desde aquí (10% de probabilidad o menos): su precio justo es poco confiable y se reportan aparte.
+LONG_SHOT_ODD = 10.0
+# Por qué no cuenta una pierna, en el orden en que se revisa.
+CLV_EXCLUSIONS = ("no_close", "no_reference", "short_window", "doubtful")
 
 
 def _clv_summary(rows: pd.DataFrame) -> dict | None:
-    """CLV de un conjunto de piernas con cierre: promedio, % que le ganó al cierre y movimiento del mercado."""
+    """CLV de un conjunto de piernas medibles: promedio, mediana, % que le ganó al cierre y movimiento de Pinnacle."""
     if rows.empty:
         return None
-    moved = rows[rows["first_p_market"].notna()]
+    moved = rows[rows["first_p_sharp"].notna()]
     return {
         "n": len(rows),
         "avg": float(rows["clv"].mean()),
+        "median": float(rows["clv"].median()),
         "beat_rate": float((rows["clv"] > 0).mean()),
         "n_move": len(moved),
-        "avg_move": float((moved["p_market"] - moved["first_p_market"]).mean()) if len(moved) else None,
+        "avg_move": float((moved["p_sharp"] - moved["first_p_sharp"]).mean()) if len(moved) else None,
     }
 
 
 def clv_data(picks: pd.DataFrame) -> tuple[dict | None, dict[str, dict]]:
-    """CLV: el momio de publicación (el primero registrado) contra la probabilidad sin comisión del cierre.
+    """CLV: el momio de publicación (el primero registrado) contra la probabilidad sin comisión de Pinnacle al cierre.
 
-    CLV = momio de publicación × probabilidad del mercado al cierre − 1: lo que valía la apuesta con los precios
-    finales. Positivo = se publicó a mejor precio que el cierre. Las piernas guardan los dos lados de cada mercado,
-    así que el promedio de todas ronda menos la comisión de la casa; lo que mide al modelo son las piernas con
-    valor al publicarse (probabilidad del modelo × momio > 1).
+    CLV = momio de publicación × probabilidad de Pinnacle al cierre − 1: lo que valía la apuesta con los precios
+    finales del mercado más preciso. Positivo = se publicó a mejor precio que el cierre.
 
-    Devuelve el resumen (None si ninguna pierna tiene momio de publicación) y el CLV por mercado de las
-    piernas con valor.
+    Una pierna cuenta si su última evaluación fue a lo más CLOSE_MAX antes del inicio, Pinnacle cotizaba ahí su
+    mercado completo, se publicó al menos MIN_WINDOW antes de esa evaluación y su momio de publicación no estaba a
+    más de MAX_PRICE_GAP del precio justo de ese momento (el de Pinnacle; si no lo había, el del mercado).
+
+    Lo que mide al modelo son las piernas con valor al publicarse (probabilidad del modelo × momio > 1) de momio
+    menor a LONG_SHOT_ODD; las de momio mayor van aparte. Todas las piernas (los dos lados de cada mercado) rondan
+    menos la comisión de la casa: son la referencia.
+
+    Devuelve el resumen (None si ninguna pierna tiene momio de publicación) y el CLV por mercado de las piernas
+    con valor que cuentan.
     """
-    published = picks[picks["first_odd"].notna()]
-    if published.empty:
+    legs = picks[picks["first_odd"].notna()].copy()
+    if legs.empty:
         return None, {}
-    with_market = published[published["p_market"].notna()]
-    fresh = (with_market["starts_at"] - with_market["evaluated_at"]) <= CLOSE_MAX
-    closed = with_market[fresh].copy()
-    closed["clv"] = closed["first_odd"] * closed["p_market"] - 1
-    value = closed[closed["first_p_model"] * closed["first_odd"] > 1]
-    hours = (closed["starts_at"] - closed["first_priced_at"]).dt.total_seconds() / 3600
+    for col in ("first_odd", "first_p_model", "first_p_market", "first_p_sharp", "p_sharp"):
+        legs[col] = pd.to_numeric(legs[col])  # una columna toda NULL llega como object
+    legs["clv"] = legs["first_odd"] * legs["p_sharp"] - 1
+    reference = legs["first_p_sharp"].fillna(legs["first_p_market"])
+    fresh = (legs["starts_at"] - legs["evaluated_at"]) <= CLOSE_MAX
+    legs["reason"] = np.select(
+        [
+            ~fresh,
+            legs["p_sharp"].isna(),
+            (legs["evaluated_at"] - legs["first_priced_at"]) < MIN_WINDOW,
+            (legs["first_odd"] * reference - 1).abs() > MAX_PRICE_GAP,  # sin precio justo al publicar: no se descarta
+        ],
+        list(CLV_EXCLUSIONS),
+        default="ok",
+    )
+    value = legs["first_p_model"] * legs["first_odd"] > 1
+    long_shot = legs["first_odd"] >= LONG_SHOT_ODD
+    counts = legs["reason"] == "ok"
+    headline = legs[counts & value & ~long_shot]
+    hours = (legs.loc[fresh, "starts_at"] - legs.loc[fresh, "first_priced_at"]).dt.total_seconds() / 3600
+    excluded = legs.loc[value, "reason"].value_counts()
     summary = {
-        "value": _clv_summary(value),
-        "all": _clv_summary(closed),
+        "value": _clv_summary(headline),
+        "long_shots": _clv_summary(legs[counts & value & long_shot]),
+        "all": _clv_summary(legs[counts & ~long_shot]),
         "hours_before": float(hours.median()) if len(hours) else None,
-        "without_close": int((~fresh).sum()),
+        # Piernas con valor que no cuentan, por motivo.
+        "excluded": {reason: int(excluded.get(reason, 0)) for reason in CLV_EXCLUSIONS},
         "close_max_minutes": int(CLOSE_MAX.total_seconds() // 60),
+        "min_window_hours": MIN_WINDOW.total_seconds() / 3600,
+        "max_price_gap": MAX_PRICE_GAP,
+        "long_shot_odd": LONG_SHOT_ODD,
     }
-    by_market = {market: {"n": len(grp), "avg": float(grp["clv"].mean())} for market, grp in value.groupby("market")}
+    by_market = {market: {"n": len(grp), "avg": float(grp["clv"].mean())} for market, grp in headline.groupby("market")}
     return summary, by_market
 
 
@@ -375,15 +416,16 @@ def performance_data(conn: psycopg.Connection, sport: Sport, **filters) -> dict:
             f"""
             SELECT k.market, k.p_model::float AS p, k.odd::float AS odd, k.p_market::float AS p_market,
                    k.result = 'won' AS won, k.first_odd::float AS first_odd, k.first_p_model::float AS first_p_model,
-                   k.first_p_market::float AS first_p_market, k.first_priced_at, k.evaluated_at, m.starts_at
+                   k.first_p_market::float AS first_p_market, k.p_sharp::float AS p_sharp,
+                   k.first_p_sharp::float AS first_p_sharp, k.first_priced_at, k.evaluated_at, m.starts_at
             FROM core.picks k JOIN core.matches m ON m.id = k.match_id
             WHERE k.sport = %(sport)s AND k.result IN ('won', 'lost') {pick_filter}
             """,
             params,
         ).fetchall(),
         columns=[
-            "market", "p", "odd", "p_market", "won", "first_odd", "first_p_model", "first_p_market",
-            "first_priced_at", "evaluated_at", "starts_at",
+            "market", "p", "odd", "p_market", "won", "first_odd", "first_p_model", "first_p_market", "p_sharp",
+            "first_p_sharp", "first_priced_at", "evaluated_at", "starts_at",
         ],
     )
     for col in ("first_priced_at", "evaluated_at", "starts_at"):
@@ -482,6 +524,18 @@ def performance_data(conn: psycopg.Connection, sport: Sport, **filters) -> dict:
     return data
 
 
+def _clv_exclusion_texts(c: dict) -> list[str]:
+    """Cuántas piernas con valor no cuentan en el CLV y por qué ("3 sin Pinnacle al cierre")."""
+    late = c["excluded"]["short_window"]
+    texts = {
+        "no_close": f"sin lectura a ≤{c['close_max_minutes']} min del inicio",
+        "no_reference": "sin Pinnacle al cierre",
+        "short_window": f"publicada{'' if late == 1 else 's'} a menos de {c['min_window_hours']:g} h del cierre",
+        "doubtful": f"con precio dudoso (a más de {c['max_price_gap']:.0%} del precio justo al publicarse)",
+    }
+    return [f"{n} {texts[reason]}" for reason, n in c["excluded"].items() if n]
+
+
 def performance_report(conn: psycopg.Connection, sport: Sport, **filters) -> str:
     d = performance_data(conn, sport, **filters)
     scope = ", ".join(f"{k}={v}" for k, v in d["filters"].items())
@@ -492,7 +546,8 @@ def performance_report(conn: psycopg.Connection, sport: Sport, **filters) -> str
     lines.append(f"Anuladas (jugador no jugó o partido cancelado): {d['legs']['void']}")
     lines.append(f"Piernas liquidadas: {d['legs']['settled']}")
     for m in d["by_market"]:
-        lines.append(f"  {m['market']:<11} n={m['n']:<6} predicho={m['predicted']:6.1%}  real={m['actual']:6.1%}")
+        clv = f"  CLV con valor={m['clv']:+.1%} (n={m['clv_n']})" if m["clv"] is not None else ""
+        lines.append(f"  {m['market']:<11} n={m['n']:<6} predicho={m['predicted']:6.1%}  real={m['actual']:6.1%}{clv}")
     lines.append("")
     lines.append("Calibración (lado favorito; predicho vs real):")
     for b in d["calibration"]:
@@ -509,20 +564,31 @@ def performance_report(conn: psycopg.Connection, sport: Sport, **filters) -> str
         )
     if d["clv"]:
         c = d["clv"]
+        odd = f"{c['long_shot_odd']:g}"
         lines.append("")
         lines.append(
-            f"CLV (momio de publicación × probabilidad sin comisión del cierre − 1; cierre a ≤{c['close_max_minutes']} min del inicio):"
+            "CLV contra el cierre de Pinnacle (momio de publicación × probabilidad sin comisión de Pinnacle − 1; "
+            f"última lectura a ≤{c['close_max_minutes']} min del inicio):"
         )
-        for label, s in (("Con valor al publicarse", c["value"]), ("Todas con momio (referencia)", c["all"])):
+        groups = (
+            (f"Con valor al publicarse (momio < {odd})", c["value"]),
+            (f"Con valor, momio ≥ {odd} (poco confiable)", c["long_shots"]),
+            (f"Todas con momio < {odd} (referencia)", c["all"]),
+        )
+        for label, s in groups:
             if s is None:
-                lines.append(f"  {label}: sin piernas con cierre")
+                lines.append(f"  {label}: sin piernas que cuenten")
                 continue
             move = f"  mercado a favor={s['avg_move'] * 100:+.1f} pts" if s["avg_move"] is not None else ""
-            lines.append(f"  {label}: n={s['n']}  CLV prom.={s['avg']:+.1%}  le ganan al cierre={s['beat_rate']:.1%}{move}")
+            lines.append(
+                f"  {label}: n={s['n']}  CLV prom.={s['avg']:+.1%}  mediana={s['median']:+.1%}  "
+                f"le ganan al cierre={s['beat_rate']:.1%}{move}"
+            )
         if c["hours_before"] is not None:
             lines.append(f"  Publicadas {c['hours_before']:.1f} h antes del partido (mediana)")
-        if c["without_close"]:
-            lines.append(f"  Sin cierre reciente (última evaluación a más de {c['close_max_minutes']} min): {c['without_close']}")
+        reasons = _clv_exclusion_texts(c)
+        if reasons:
+            lines.append("  Piernas con valor que no cuentan: " + " · ".join(reasons))
     if d["parlays"]:
         lines.append("")
         lines.append("Parlays sugeridos:")

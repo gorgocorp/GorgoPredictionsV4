@@ -12,7 +12,7 @@ import pytest
 
 from app.core.bets import LegInput, create_bet, list_bets
 from app.core.parlay import Candidate
-from app.core.tracking import performance_data, record_picks, settle_all
+from app.core.tracking import performance_data, performance_report, record_picks, settle_all
 from app.sports import all_sports
 from app.sports.futbol.engine.legs import LegSpec as FutbolLeg
 from app.sports.futbol.matches import sync_matches as sync_futbol
@@ -149,24 +149,25 @@ CLOSE = datetime(2026, 10, 21, 23, 20, tzinfo=timezone.utc)  # 10 min antes del 
 
 
 def priced(match: int, starts: str, legs: list[tuple]) -> Card:
-    """Tarjeta con piernas (spec, descripción, p_modelo, momio, p_mercado)."""
+    """Tarjeta con piernas (spec, descripción, p_modelo, momio, p_mercado, p_Pinnacle)."""
     return Card(
         match,
         pd.Timestamp(starts),
-        [Candidate("nba", match, "A vs B", spec, desc, p, odd=odd, bookmaker="Bet365" if odd else None, p_market=pm)
-         for spec, desc, p, odd, pm in legs],
+        [Candidate("nba", match, "A vs B", spec, desc, p, odd=odd, bookmaker="Bet365" if odd else None, p_market=pm,
+                   p_sharp=ps)
+         for spec, desc, p, odd, pm, ps in legs],
     )
 
 
 def test_first_price_is_kept_and_the_last_price_is_the_close(db):
     add_nba_game(db, 1001, starts=EARLY)
     publish = [priced(1001, EARLY, [
-        (NbaLeg("ml", "home"), "Gana local", 0.55, 2.10, 0.47),
-        (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, None, None),  # todavía sin momio
+        (NbaLeg("ml", "home"), "Gana local", 0.55, 2.10, 0.47, 0.46),
+        (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, None, None, None),  # todavía sin momio
     ])]
     close = [priced(1001, EARLY, [
-        (NbaLeg("ml", "home"), "Gana local", 0.58, 1.90, 0.52),
-        (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.66, 1.95, 0.50),
+        (NbaLeg("ml", "home"), "Gana local", 0.58, 1.90, 0.52, 0.53),
+        (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.66, 1.95, 0.50, 0.49),
     ])]
     record_picks(db, with_engine("nba", publish), None, DAY, "Bet365", now=BEFORE)
     record_picks(db, with_engine("nba", close), None, DAY, "Bet365", now=CLOSE)
@@ -177,71 +178,94 @@ def test_first_price_is_kept_and_the_last_price_is_the_close(db):
         r["description"]: r
         for r in db.execute(
             """
-            SELECT description, odd::float, p_market::float, evaluated_at, first_odd::float,
-                   first_p_model::float, first_p_market::float, first_priced_at
+            SELECT description, odd::float, p_market::float, p_sharp::float, evaluated_at, first_odd::float,
+                   first_p_model::float, first_p_market::float, first_p_sharp::float, first_priced_at
             FROM core.picks
             """
         )
     }
     home, over = rows["Gana local"], rows["Más de 220.5"]
-    assert (home["first_odd"], home["first_p_model"], home["first_p_market"], home["first_priced_at"]) == (2.10, 0.55, 0.47, BEFORE)
-    assert (home["odd"], home["p_market"], home["evaluated_at"]) == (1.90, 0.52, CLOSE)
-    # Sin momio al publicarse: su momio de publicación es el primero que tuvo.
-    assert (over["first_odd"], over["first_p_model"], over["first_priced_at"]) == (1.95, 0.66, CLOSE)
+    first = ("first_odd", "first_p_model", "first_p_market", "first_p_sharp", "first_priced_at")
+    assert tuple(home[k] for k in first) == (2.10, 0.55, 0.47, 0.46, BEFORE)
+    assert (home["odd"], home["p_market"], home["p_sharp"], home["evaluated_at"]) == (1.90, 0.52, 0.53, CLOSE)
+    # Sin momio al publicarse: su momio de publicación (y su probabilidad de Pinnacle) es el primero que tuvo.
+    assert tuple(over[k] for k in first if k != "first_p_market") == (1.95, 0.66, 0.49, CLOSE)
 
 
-def test_performance_reports_clv_against_the_close(db):
+def test_performance_reports_clv_against_the_pinnacle_close(db):
     add_nba_game(db, 1001, starts=EARLY)
     add_nba_game(db, 1002, starts=LATE, home=134, away=135)  # su última evaluación queda lejos del inicio
-    late = (NbaLeg("ml", "home"), "Gana local 1002", 0.60, 2.00, 0.50)
+    late = (NbaLeg("ml", "home"), "Gana local 1002", 0.60, 2.00, 0.50, 0.50)
+    # (spec, descripción, p_modelo, momio, p_mercado, p_Pinnacle) al publicar y al cierre.
     publish = [
         priced(1001, EARLY, [
-            (NbaLeg("ml", "home"), "Gana local", 0.55, 2.10, 0.47),
-            (NbaLeg("ml", "away"), "Gana visitante", 0.45, 1.80, 0.53),
-            (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, None, None),
+            (NbaLeg("ml", "home"), "Gana local", 0.55, 2.10, 0.47, 0.47),
+            (NbaLeg("ml", "away"), "Gana visitante", 0.45, 1.80, 0.53, 0.53),
+            (NbaLeg("total", "over", 215.5), "Más de 215.5", 0.60, 1.90, 0.31, 0.30),
+            (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, None, None, None),
+            (NbaLeg("total", "under", 220.5), "Menos de 220.5", 0.55, None, None, None),
+            (NbaLeg("total", "over", 240.5), "Más de 240.5", 0.12, 11.0, 0.085, 0.085),
         ]),
         priced(1002, LATE, [late]),
     ]
     close = [
         priced(1001, EARLY, [
-            (NbaLeg("ml", "home"), "Gana local", 0.58, 1.90, 0.52),
-            (NbaLeg("ml", "away"), "Gana visitante", 0.42, 1.95, 0.48),
-            (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, 1.95, 0.50),
+            (NbaLeg("ml", "home"), "Gana local", 0.58, 1.90, 0.52, 0.52),
+            (NbaLeg("ml", "away"), "Gana visitante", 0.42, 1.95, 0.48, 0.48),
+            (NbaLeg("total", "over", 215.5), "Más de 215.5", 0.60, 1.90, 0.31, 0.30),
+            (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, 1.95, 0.50, None),  # Pinnacle no la cotiza
+            (NbaLeg("total", "under", 220.5), "Menos de 220.5", 0.55, 2.00, 0.50, 0.50),
+            (NbaLeg("total", "over", 240.5), "Más de 240.5", 0.12, 11.0, 0.095, 0.095),
         ]),
         priced(1002, LATE, [late]),
     ]
     record_picks(db, with_engine("nba", publish), None, DAY, "Bet365", now=BEFORE)
     record_picks(db, with_engine("nba", close), None, DAY, "Bet365", now=CLOSE)
 
-    # Gana el local 110-100 en los dos partidos; el total (210) no pasa de 220.5.
+    # Gana el local 110-100 en los dos partidos (210 puntos).
     db.execute("UPDATE nba.games SET status = 'FT', home_total = 110, away_total = 100 WHERE id IN (1001, 1002)")
     sync_nba(db, [1001, 1002])
     settle_all(db, [all_sports()["nba"]], now=AFTER)
 
     data = performance_data(db, all_sports()["nba"], include_preseason=True)
     clv = data["clv"]
-    # CLV = momio de publicación × probabilidad del cierre − 1. Con valor al publicarse: local (0.55 × 2.10) y
-    # el total (0.65 × 1.95); el visitante (0.45 × 1.80) no.
-    assert clv["value"]["n"] == 2
-    assert clv["value"]["avg"] == pytest.approx(((2.10 * 0.52 - 1) + (1.95 * 0.50 - 1)) / 2)
-    assert clv["value"]["beat_rate"] == 0.5
-    # El mercado se movió 5 pts a favor del local; el total se publicó en el cierre (sin movimiento).
-    assert clv["value"]["avg_move"] == pytest.approx((0.05 + 0) / 2)
-    assert clv["value"]["n_move"] == 2
-    assert clv["all"]["n"] == 3
-    assert clv["all"]["avg"] == pytest.approx(((2.10 * 0.52 - 1) + (1.80 * 0.48 - 1) + (1.95 * 0.50 - 1)) / 3)
-    assert clv["hours_before"] == pytest.approx(11.5)  # mediana de 11.5, 11.5 y 10 min
-    assert clv["without_close"] == 1  # el del segundo partido: evaluado 2 h 40 min antes del inicio
+    # CLV = momio de publicación × probabilidad de Pinnacle al cierre − 1. Sólo cuenta el local: tenía valor
+    # (0.55 × 2.10), Pinnacle cotizaba su cierre y se publicó 11 h antes.
+    value = clv["value"]
+    assert (value["n"], value["beat_rate"]) == (1, 1.0)
+    assert (value["avg"], value["median"]) == (pytest.approx(2.10 * 0.52 - 1), pytest.approx(2.10 * 0.52 - 1))
+    assert (value["n_move"], value["avg_move"]) == (1, pytest.approx(0.05))  # Pinnacle subió 5 pts hacia el local
+    # Momio de 10 o más: aparte.
+    assert clv["long_shots"]["n"] == 1
+    assert clv["long_shots"]["avg"] == pytest.approx(11.0 * 0.095 - 1)
+    # Referencia: los dos lados del ganador (el visitante no tenía valor: 0.45 × 1.80).
+    assert clv["all"]["n"] == 2
+    assert clv["all"]["avg"] == pytest.approx(((2.10 * 0.52 - 1) + (1.80 * 0.48 - 1)) / 2)
+    # Con valor pero no cuentan: el del partido 1002 (última lectura 2 h 40 min antes del inicio), más de 220.5
+    # (Pinnacle no la cotizaba al cierre), menos de 220.5 (publicada en el cierre mismo) y más de 215.5 (1.90 contra
+    # 30% de Pinnacle: precio dudoso).
+    assert clv["excluded"] == {"no_close": 1, "no_reference": 1, "short_window": 1, "doubtful": 1}
+    assert clv["hours_before"] == pytest.approx(11.5)  # mediana: 4 piernas de 11.5 h y 2 de 10 min
     by_market = {m["market"]: (m["clv_n"], m["clv"]) for m in data["by_market"]}
     assert by_market["ml"] == (1, pytest.approx(2.10 * 0.52 - 1))
-    assert by_market["total"] == (1, pytest.approx(1.95 * 0.50 - 1))
+    assert by_market["total"] == (0, None)
+
+    report = performance_report(db, all_sports()["nba"], include_preseason=True)
+    assert "Con valor al publicarse (momio < 10): n=1  CLV prom.=+9.2%  mediana=+9.2%  le ganan al cierre=100.0%" in report
+    assert (
+        "Piernas con valor que no cuentan: 1 sin lectura a ≤90 min del inicio · 1 sin Pinnacle al cierre · "
+        "1 publicada a menos de 2 h del cierre · 1 con precio dudoso (a más de 20% del precio justo al publicarse)"
+    ) in report
 
 
 def test_performance_without_first_prices_has_no_clv(db):
     # Piernas registradas antes de guardar el momio de publicación (o importadas): sin CLV.
     add_nba_game(db, 1001, starts=EARLY)
     record_picks(db, with_engine("nba", [nba_legs(1001, EARLY)]), None, DAY, "Bet365", now=BEFORE)
-    db.execute("UPDATE core.picks SET first_odd = NULL, first_p_model = NULL, first_p_market = NULL, first_priced_at = NULL")
+    db.execute(
+        "UPDATE core.picks SET first_odd = NULL, first_p_model = NULL, first_p_market = NULL, first_p_sharp = NULL, "
+        "first_priced_at = NULL"
+    )
     db.execute("UPDATE nba.games SET status = 'FT', home_total = 110, away_total = 100 WHERE id = 1001")
     sync_nba(db, [1001])
     settle_all(db, [all_sports()["nba"]], now=AFTER)

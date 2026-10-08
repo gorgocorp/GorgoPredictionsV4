@@ -5,7 +5,9 @@ import pytest
 
 from app.sports.futbol.engine.dist import prob_at_least, prob_over
 from app.sports.futbol.engine.legs import LegSpec, describe, settle
-from app.sports.futbol.engine.odds import Quote, american, market_probabilities, match_player, names_match, parse_selection
+from app.sports.futbol.engine.odds import (
+    Quote, american, market_probabilities, match_player, names_match, parse_selection, sharp_probabilities,
+)
 from app.core.parlay import Candidate, ParlayFilters, build_parlay
 from app.sports.futbol.engine.picks import book_odds, model_line_specs, team_probability
 from app.sports.futbol.engine.player_model import PlayerProjection
@@ -83,6 +85,30 @@ def test_market_probabilities_three_way_and_double_chance():
 def test_market_probabilities_needs_both_sides():
     probs = market_probabilities([Quote(LegSpec("total", "over", 2.5), "Bet365", 1.8)])
     assert probs == {}
+
+
+def test_sharp_probabilities_never_fall_back_to_other_books():
+    # Sólo Betano cotiza los dos lados, con el "menos de" en el mínimo: su devig da 6.7% a "más de 4.5" (Bet365 lo
+    # paga a 51). El mercado lo usa; la referencia del CLV no.
+    over, under = LegSpec("team_total", "over", 4.5, team="home"), LegSpec("team_total", "under", 4.5, team="home")
+    quotes = [Quote(over, "Bet365", 51.0), Quote(over, "Betano", 14.0), Quote(under, "Betano", 1.01)]
+    assert market_probabilities(quotes)[over] == pytest.approx(0.0673, abs=1e-4)
+    assert sharp_probabilities(quotes) == {}
+
+
+def test_sharp_probabilities_use_pinnacle_and_its_double_chance():
+    quotes = [
+        Quote(LegSpec("1x2", "home"), "Pinnacle", 2.0),
+        Quote(LegSpec("1x2", "draw"), "Pinnacle", 4.0),
+        Quote(LegSpec("1x2", "away"), "Pinnacle", 4.0),
+        Quote(LegSpec("total", "over", 2.5), "Bet365", 1.8),
+        Quote(LegSpec("total", "under", 2.5), "Bet365", 2.0),
+    ]
+    sharp = sharp_probabilities(quotes)
+    assert sharp[LegSpec("1x2", "home")] == pytest.approx(0.5)
+    assert sharp[LegSpec("dc", "x2")] == pytest.approx(0.5)
+    assert LegSpec("total", "over", 2.5) not in sharp  # sólo la cotiza Bet365
+    assert LegSpec("total", "over", 2.5) in market_probabilities(quotes)
 
 
 def test_book_odds_keeps_configured_bookmakers():

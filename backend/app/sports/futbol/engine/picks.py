@@ -11,7 +11,7 @@ from app.config import PRICE_BOOKMAKERS
 from app.sports.futbol.engine.cards_model import CardsModel, CardsModelParams, CardsPrediction, fit_cards_model
 from app.sports.futbol.engine.history import History
 from app.sports.futbol.engine.legs import LegSpec, describe
-from app.sports.futbol.engine.odds import Quote, market_probabilities, match_player, parse_selection
+from app.sports.futbol.engine.odds import Quote, market_probabilities, match_player, parse_selection, sharp_probabilities
 from app.core.parlay import Candidate
 from app.sports.futbol.engine.player_model import LADDERS, STATS, PlayerModel, PlayerModelParams
 from app.sports.futbol.engine.team_model import GoalModelParams, MatchPrediction, fit_goal_ratings
@@ -234,6 +234,7 @@ def generate_day(
                 spec = LegSpec("player", spec.side, spec.line, stat=spec.stat, player_id=pid)
             quotes.append(Quote(spec, r["bookmaker_name"] or "?", r["odd"]))
         p_market = market_probabilities(quotes)
+        p_sharp = sharp_probabilities(quotes)
         quotes_by_spec = defaultdict(list)
         for q in quotes:
             quotes_by_spec[q.spec].append(q)
@@ -255,6 +256,7 @@ def generate_day(
                     odd=price.odd if price else None,
                     bookmaker=price.bookmaker if price else None,
                     p_market=p_market.get(spec),
+                    p_sharp=p_sharp.get(spec),
                     hits=hits(spec) if is_player else [],
                     player_status=player_flag(spec.player_id) if is_player else None,
                     book_odds=prices or {},

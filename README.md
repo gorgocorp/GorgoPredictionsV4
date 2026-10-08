@@ -129,14 +129,24 @@ Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían 
   de lesiones; `FUTBOL_CLOSING_LEAD_MINUTES`=0, apagada: la previa de fútbol ya lee después de las alineaciones).
   Cada corrida vuelve a registrar los picks de hoy y mañana.
 - **Momio de publicación**: la primera vez que una pierna se registra con momio de `BOOKMAKER`, `core.picks` guarda
-  `first_odd`, `first_p_model`, `first_p_market` y `first_priced_at`, que ya no cambian. `odd`, `p_model` y `p_market`
-  siguen actualizándose hasta que empieza el partido: quedan con los del cierre.
-- **CLV** (Rendimiento y `performance`): momio de publicación × probabilidad sin comisión del mercado al cierre − 1
-  (Pinnacle si cotiza el mercado completo; si no, la mediana de las casas). Sólo cuentan las piernas cuya última
-  evaluación fue a 90 min o menos del inicio. El que mide al modelo es el de las **piernas con valor al publicarse**
-  (probabilidad del modelo × momio > 1); el de todas las piernas es sólo referencia (incluye los dos lados de cada
-  mercado y ronda menos la comisión de la casa). Las piernas de partidos que empezaron antes de este cambio
-  (7-oct-2026) no tienen momio de publicación; las de partidos pendientes lo tomaron en la primera corrida después.
+  `first_odd`, `first_p_model`, `first_p_market`, `first_p_sharp` y `first_priced_at`, que ya no cambian. `odd`,
+  `p_model`, `p_market` y `p_sharp` siguen actualizándose hasta que empieza el partido: quedan con los del cierre.
+- **Probabilidad del mercado y de Pinnacle**: `p_market` es la de Pinnacle si cotiza el mercado completo y, si no, la
+  mediana de las casas que sí (se muestra en las piernas). `p_sharp` es sólo la de Pinnacle (NULL si no cotiza el
+  mercado completo): con una sola casa que pone un lado en el mínimo (1.01), el devig infla mucho los momios altos
+  (p. ej. 6.7% para "más de 4.5 goles" de un equipo que Bet365 paga a 51), así que el CLV no usa esa mediana.
+- **CLV** (Rendimiento y `performance`): momio de publicación × probabilidad sin comisión de Pinnacle al cierre − 1.
+  Una pierna cuenta si su última evaluación fue a 90 min o menos del inicio, Pinnacle cotizaba ahí su mercado
+  completo, se publicó al menos 2 h antes de esa evaluación (si no, publicación y cierre son la misma foto) y su
+  momio de publicación no estaba a más de 20% del precio justo de ese momento (Pinnacle; si no lo había, el mercado):
+  una diferencia así casi siempre es un dato malo. El que mide al modelo es el de las **piernas con valor al
+  publicarse** (probabilidad del modelo × momio > 1) de momio menor a 10, con promedio y mediana; las de momio 10 o
+  más van aparte (poco confiables) y el de todas las piernas es sólo referencia (incluye los dos lados de cada mercado
+  y ronda menos la comisión de la casa). Rendimiento dice cuántas piernas con valor no cuentan y por qué.
+- **Historia**: las piernas de partidos que empezaron antes del 7-oct-2026 no tienen momio de publicación; las de
+  partidos pendientes lo tomaron en la primera corrida después. `p_sharp` existe desde el 8-oct-2026 (migración
+  0006): las piernas publicadas antes no tienen `first_p_sharp`, así que su filtro de precio dudoso usa
+  `first_p_market` y no entran en "mercado a favor", pero su CLV sí se mide contra el cierre de Pinnacle.
 - Límite conocido: si una casa retira una selección, la vista `v_odds_latest` sigue dando su último momio. En los
   datos del 6 y 7-oct pasó en 51 de ~124 mil selecciones de fútbol y en ninguna de NBA.
 

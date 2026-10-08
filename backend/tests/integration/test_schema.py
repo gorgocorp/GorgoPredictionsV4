@@ -2,6 +2,7 @@
 
 import psycopg
 import pytest
+from psycopg import sql
 
 from app.sports.futbol.matches import sync_matches as sync_futbol
 from app.sports.nba.matches import sync_matches as sync_nba
@@ -94,6 +95,28 @@ def test_pick_first_price_is_complete(db):
         with pytest.raises(psycopg.errors.CheckViolation):
             with db.transaction():
                 db.execute(set_first.format(priced_at), (odd, p_model, p_market, pick))
+
+
+def test_pick_sharp_price_needs_a_first_price(db):
+    add_nba_game(db, 5600)
+    sync_nba(db)
+    pick = add_pick(db, "nba", match_id(db, "nba", 5600), "ml", "home")
+    db.execute("UPDATE core.picks SET p_sharp = 0.52 WHERE id = %s", (pick,))  # Pinnacle al cierre sin publicar: válido
+    for column, value in (
+        ("first_p_sharp", 0.5),  # probabilidad de Pinnacle al publicarse sin momio de publicación
+        ("p_sharp", 1.2),  # fuera de rango
+    ):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            with db.transaction():
+                query = sql.SQL("UPDATE core.picks SET {} = %s WHERE id = %s").format(sql.Identifier(column))
+                db.execute(query, (value, pick))
+    db.execute(
+        """
+        UPDATE core.picks SET first_odd = 2.1, first_p_model = 0.55, first_p_sharp = 0.47, first_priced_at = evaluated_at
+        WHERE id = %s
+        """,
+        (pick,),
+    )
 
 
 def test_pick_sport_must_be_its_match_sport(db):

@@ -22,6 +22,8 @@ class Candidate:
     odd: float | None = None
     bookmaker: str | None = None
     p_market: float | None = None
+    # Probabilidad sin comisión de Pinnacle (referencia del CLV); None si no cotiza el mercado completo.
+    p_sharp: float | None = None
     hits: list[tuple[int, int]] = field(default_factory=list)  # [(aciertos, partidos)] p. ej. últimos 10 y 25 partidos
     # Estado del jugador en props: "questionable" (en duda) o, en fútbol, "starter" con alineación confirmada.
     player_status: str | None = None
