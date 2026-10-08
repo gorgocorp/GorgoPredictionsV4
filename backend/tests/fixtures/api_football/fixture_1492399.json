@@ -1,0 +1,524 @@
+{
+ "fixture": {
+  "id": 1492399,
+  "referee": "Edina Alves Batista",
+  "date": "2026-10-07T23:00:00+00:00",
+  "status": {
+   "long": "Match Finished",
+   "short": "FT",
+   "elapsed": 90,
+   "extra": null
+  }
+ },
+ "league": {
+  "id": 71,
+  "name": "Serie A",
+  "season": 2026,
+  "round": "Regular Season - 29"
+ },
+ "teams": {
+  "home": {
+   "id": 136,
+   "name": "Vitoria",
+   "logo": "https://media.api-sports.io/football/teams/136.png",
+   "winner": true
+  },
+  "away": {
+   "id": 132,
+   "name": "Chapecoense-sc",
+   "logo": "https://media.api-sports.io/football/teams/132.png",
+   "winner": false
+  }
+ },
+ "goals": {
+  "home": 4,
+  "away": 0
+ },
+ "score": {
+  "halftime": {
+   "home": 1,
+   "away": 0
+  },
+  "fulltime": {
+   "home": 4,
+   "away": 0
+  },
+  "extratime": {
+   "home": null,
+   "away": null
+  },
+  "penalty": {
+   "home": null,
+   "away": null
+  }
+ },
+ "events": [
+  {
+   "time": {
+    "elapsed": 22,
+    "extra": null
+   },
+   "team": {
+    "id": 132,
+    "name": "Chapecoense-sc",
+    "logo": "https://media.api-sports.io/football/teams/132.png"
+   },
+   "player": {
+    "id": 352220,
+    "name": "Kauan Faria"
+   },
+   "assist": {
+    "id": null,
+    "name": null
+   },
+   "type": "Card",
+   "detail": "Yellow Card",
+   "comments": "Foul"
+  }
+ ],
+ "lineups": [
+  {
+   "team": {
+    "id": 136,
+    "name": "Vitoria"
+   },
+   "formation": "4-2-3-1",
+   "startXI": [
+    {
+     "player": {
+      "id": 10085,
+      "name": "Cacá",
+      "number": 25,
+      "pos": "D",
+      "grid": "2:3"
+     }
+    }
+   ],
+   "substitutes": [
+    {
+     "player": {
+      "id": 288230,
+      "name": "Zé Vitor",
+      "number": 88,
+      "pos": "M",
+      "grid": null
+     }
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": 132,
+    "name": "Chapecoense-sc"
+   },
+   "formation": "4-2-3-1",
+   "startXI": [
+    {
+     "player": {
+      "id": 80173,
+      "name": "Anderson",
+      "number": 98,
+      "pos": "G",
+      "grid": "1:1"
+     }
+    },
+    {
+     "player": {
+      "id": 352220,
+      "name": "Kauan Faria Gomes",
+      "number": 21,
+      "pos": "D",
+      "grid": "2:3"
+     }
+    }
+   ],
+   "substitutes": [
+    {
+     "player": {
+      "id": 80626,
+      "name": "Bruno Matias",
+      "number": 16,
+      "pos": "M",
+      "grid": null
+     }
+    }
+   ]
+  }
+ ],
+ "statistics": [
+  {
+   "team": {
+    "id": 136,
+    "name": "Vitoria"
+   },
+   "statistics": [
+    {
+     "type": "Shots on Goal",
+     "value": 8
+    },
+    {
+     "type": "Total Shots",
+     "value": 20
+    },
+    {
+     "type": "Yellow Cards",
+     "value": 2
+    },
+    {
+     "type": "Corner Kicks",
+     "value": 3
+    },
+    {
+     "type": "Fouls",
+     "value": 8
+    },
+    {
+     "type": "Ball Possession",
+     "value": "52%"
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": 132,
+    "name": "Chapecoense-sc"
+   },
+   "statistics": [
+    {
+     "type": "Shots on Goal",
+     "value": 4
+    },
+    {
+     "type": "Total Shots",
+     "value": 11
+    },
+    {
+     "type": "Yellow Cards",
+     "value": 3
+    },
+    {
+     "type": "Corner Kicks",
+     "value": 6
+    },
+    {
+     "type": "Fouls",
+     "value": 17
+    },
+    {
+     "type": "Ball Possession",
+     "value": "48%"
+    }
+   ]
+  }
+ ],
+ "players": [
+  {
+   "team": {
+    "id": 22722,
+    "name": null,
+    "logo": "https://media.api-sports.io/football/teams/22722.png",
+    "update": "1970-01-01T00:00:00+00:00"
+   },
+   "players": [
+    {
+     "player": {
+      "id": 80626,
+      "name": "Bruno Matias"
+     },
+     "statistics": [
+      {
+       "games": {
+        "minutes": 20,
+        "number": 16,
+        "position": "M",
+        "rating": "5.88",
+        "captain": false,
+        "substitute": false
+       },
+       "shots": {
+        "total": 0,
+        "on": 0
+       },
+       "goals": {
+        "total": 0,
+        "conceded": null,
+        "assists": 0,
+        "saves": 0
+       },
+       "passes": {
+        "total": 19,
+        "key": 0,
+        "accuracy": "18"
+       },
+       "fouls": {
+        "drawn": 0,
+        "committed": 0
+       },
+       "cards": {
+        "yellow": 0,
+        "red": 0
+       },
+       "penalty": {
+        "won": null,
+        "commited": null,
+        "scored": 0,
+        "missed": null,
+        "saved": null
+       }
+      }
+     ]
+    },
+    {
+     "player": {
+      "id": 80173,
+      "name": "Anderson"
+     },
+     "statistics": [
+      {
+       "games": {
+        "minutes": 90,
+        "number": 98,
+        "position": "G",
+        "rating": "6.19",
+        "captain": false,
+        "substitute": false
+       },
+       "shots": {
+        "total": 0,
+        "on": 0
+       },
+       "goals": {
+        "total": 0,
+        "conceded": null,
+        "assists": 0,
+        "saves": 4
+       },
+       "passes": {
+        "total": 25,
+        "key": 0,
+        "accuracy": "16"
+       },
+       "fouls": {
+        "drawn": 0,
+        "committed": 0
+       },
+       "cards": {
+        "yellow": 0,
+        "red": 0
+       },
+       "penalty": {
+        "won": null,
+        "commited": null,
+        "scored": 0,
+        "missed": null,
+        "saved": null
+       }
+      }
+     ]
+    },
+    {
+     "player": {
+      "id": 352220,
+      "name": "Kauan Faria Gomes"
+     },
+     "statistics": [
+      {
+       "games": {
+        "minutes": 90,
+        "number": 21,
+        "position": "D",
+        "rating": "5.91",
+        "captain": false,
+        "substitute": false
+       },
+       "shots": {
+        "total": 0,
+        "on": 0
+       },
+       "goals": {
+        "total": 0,
+        "conceded": null,
+        "assists": 0,
+        "saves": 0
+       },
+       "passes": {
+        "total": 43,
+        "key": 0,
+        "accuracy": "39"
+       },
+       "fouls": {
+        "drawn": 0,
+        "committed": 1
+       },
+       "cards": {
+        "yellow": 1,
+        "red": 0
+       },
+       "penalty": {
+        "won": null,
+        "commited": null,
+        "scored": 0,
+        "missed": null,
+        "saved": null
+       }
+      }
+     ]
+    },
+    {
+     "player": {
+      "id": 0,
+      "name": "Tulio Eduardo Silva De Oliveira"
+     },
+     "statistics": [
+      {
+       "games": {
+        "minutes": 90,
+        "number": null,
+        "position": null,
+        "rating": "6.63",
+        "captain": false,
+        "substitute": false
+       },
+       "shots": {
+        "total": 1,
+        "on": 0
+       },
+       "goals": {
+        "total": 0,
+        "conceded": null,
+        "assists": 0,
+        "saves": 0
+       },
+       "passes": {
+        "total": 22,
+        "key": 0,
+        "accuracy": "14"
+       },
+       "fouls": {
+        "drawn": 3,
+        "committed": 3
+       },
+       "cards": {
+        "yellow": 0,
+        "red": 0
+       },
+       "penalty": {
+        "won": null,
+        "commited": null,
+        "scored": 0,
+        "missed": null,
+        "saved": null
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "team": {
+    "id": 136,
+    "name": "Vitoria",
+    "logo": "https://media.api-sports.io/football/teams/136.png",
+    "update": "1970-01-01T00:00:00+00:00"
+   },
+   "players": [
+    {
+     "player": {
+      "id": 288230,
+      "name": "Zé Vitor"
+     },
+     "statistics": [
+      {
+       "games": {
+        "minutes": 0,
+        "number": 88,
+        "position": "M",
+        "rating": "0",
+        "captain": false,
+        "substitute": false
+       },
+       "shots": {
+        "total": 0,
+        "on": 0
+       },
+       "goals": {
+        "total": 0,
+        "conceded": null,
+        "assists": 0,
+        "saves": 0
+       },
+       "passes": {
+        "total": 0,
+        "key": 0,
+        "accuracy": "0"
+       },
+       "fouls": {
+        "drawn": 0,
+        "committed": 0
+       },
+       "cards": {
+        "yellow": 0,
+        "red": 0
+       },
+       "penalty": {
+        "won": null,
+        "commited": null,
+        "scored": 0,
+        "missed": null,
+        "saved": null
+       }
+      }
+     ]
+    },
+    {
+     "player": {
+      "id": 10085,
+      "name": "Cacá"
+     },
+     "statistics": [
+      {
+       "games": {
+        "minutes": 90,
+        "number": 25,
+        "position": "D",
+        "rating": "6.6",
+        "captain": false,
+        "substitute": false
+       },
+       "shots": {
+        "total": 0,
+        "on": 0
+       },
+       "goals": {
+        "total": 0,
+        "conceded": null,
+        "assists": 0,
+        "saves": 0
+       },
+       "passes": {
+        "total": 60,
+        "key": 0,
+        "accuracy": "56"
+       },
+       "fouls": {
+        "drawn": 0,
+        "committed": 2
+       },
+       "cards": {
+        "yellow": 0,
+        "red": 0
+       },
+       "penalty": {
+        "won": null,
+        "commited": null,
+        "scored": 0,
+        "missed": null,
+        "saved": null
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

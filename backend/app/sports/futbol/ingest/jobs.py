@@ -92,48 +92,71 @@ def ingest_fixtures(conn: psycopg.Connection, api: ApiSportsClient, league_id: i
 # ---------------------------------------------------------------- detalle de partidos
 
 
+def _parse_details(item: dict, fetched_at: datetime) -> dict[str, Any]:
+    """Filas de un partido de /fixtures?ids=: equipos, partido, estadísticas, jugadores, eventos y alineaciones."""
+    teams = normalize.team_rows(item, fetched_at)
+    fixture = normalize.fixture_row(item, fetched_at)
+    # Sólo un partido terminado queda con detalle "completo"; los demás se vuelven a pedir.
+    fixture["details_fetched_at"] = fetched_at if fixture["status"] in FINISHED else None
+    players, player_stats = normalize.player_stats_rows(item, fetched_at)
+    lineup_players, lineups = normalize.lineup_rows(item, fetched_at)
+    return {
+        "teams": teams, "fixture": fixture, "team_stats": normalize.team_stats_rows(item, fetched_at),
+        "players": players, "player_stats": player_stats, "events": normalize.event_rows(item),
+        "lineup_players": lineup_players, "lineups": lineups,
+    }
+
+
+def _write_details(conn: psycopg.Connection, parsed: list[dict[str, Any]]) -> int:
+    def rows(key: str) -> list[dict[str, Any]]:
+        return [r for d in parsed for r in d[key]]
+
+    ids = [d["fixture"]["id"] for d in parsed]
+    players = {p["id"]: p for p in rows("players")}
+    events, lineups = rows("events"), rows("lineups")
+    upsert(conn, ("futbol", "teams"), rows("teams"), ["id"])
+    upsert(conn, ("futbol", "fixtures"), [d["fixture"] for d in parsed], ["id"])
+    sync_matches(conn, ids)
+    upsert(conn, ("futbol", "players"), list(players.values()), ["id"])
+    upsert(conn, ("futbol", "players"), [p for p in rows("lineup_players") if p["id"] not in players], ["id"], do_nothing=True)
+    upsert(conn, ("futbol", "fixture_team_stats"), rows("team_stats"), ["fixture_id", "team_id"])
+    upsert(conn, ("futbol", "fixture_player_stats"), rows("player_stats"), ["fixture_id", "player_id"])
+    with_events = sorted({e["fixture_id"] for e in events})
+    if with_events:
+        conn.execute("DELETE FROM futbol.fixture_events WHERE fixture_id = ANY(%s)", (with_events,))
+        upsert(conn, ("futbol", "fixture_events"), events, ["fixture_id", "seq"])
+    with_lineups = sorted({r["fixture_id"] for r in lineups})
+    if with_lineups:
+        conn.execute("DELETE FROM futbol.fixture_lineups WHERE fixture_id = ANY(%s)", (with_lineups,))
+        upsert(conn, ("futbol", "fixture_lineups"), lineups, ["fixture_id", "player_id"])
+    return len(ids)
+
+
 def _store_details(conn: psycopg.Connection, raw_items: list[dict], fetched_at: datetime) -> int:
-    """Guarda partido, estadísticas, jugadores, eventos y alineaciones de /fixtures?ids=."""
-    teams, fixtures, team_stats, players, player_stats, events, lineup_players, lineups = {}, [], [], {}, [], [], {}, []
+    """Guarda partido, estadísticas, jugadores, eventos y alineaciones de /fixtures?ids=.
+
+    El lote va en una transacción; si la base rechaza un dato, se guarda partido por partido para que el
+    registro malo sólo deje fuera a su partido (queda sin detalle y se vuelve a pedir en la siguiente corrida).
+    """
+    parsed = []
     for item in raw_items:
         try:
-            for t in normalize.team_rows(item, fetched_at):
-                teams[t["id"]] = t
-            fixture = normalize.fixture_row(item, fetched_at)
+            parsed.append(_parse_details(item, fetched_at))
         except (normalize.InvalidRecord, KeyError) as exc:
             log.warning("detalle descartado: %s", exc)
-            continue
-        finished = fixture["status"] in FINISHED
-        # Sólo un partido terminado queda con detalle "completo"; los demás se vuelven a pedir.
-        fixture["details_fetched_at"] = fetched_at if finished else None
-        fixtures.append(fixture)
-        team_stats += normalize.team_stats_rows(item, fetched_at)
-        ps, stats = normalize.player_stats_rows(item, fetched_at)
-        players.update({p["id"]: p for p in ps})
-        player_stats += stats
-        events += normalize.event_rows(item)
-        lp, lr = normalize.lineup_rows(item, fetched_at)
-        lineup_players.update({p["id"]: p for p in lp})
-        lineups += lr
-
-    ids = [f["id"] for f in fixtures]
-    with conn.transaction():
-        upsert(conn, ("futbol", "teams"), list(teams.values()), ["id"])
-        upsert(conn, ("futbol", "fixtures"), fixtures, ["id"])
-        sync_matches(conn, ids)
-        upsert(conn, ("futbol", "players"), list(players.values()), ["id"])
-        upsert(conn, ("futbol", "players"), [p for pid, p in lineup_players.items() if pid not in players], ["id"], do_nothing=True)
-        upsert(conn, ("futbol", "fixture_team_stats"), team_stats, ["fixture_id", "team_id"])
-        upsert(conn, ("futbol", "fixture_player_stats"), player_stats, ["fixture_id", "player_id"])
-        with_events = sorted({e["fixture_id"] for e in events})
-        if with_events:
-            conn.execute("DELETE FROM futbol.fixture_events WHERE fixture_id = ANY(%s)", (with_events,))
-            upsert(conn, ("futbol", "fixture_events"), events, ["fixture_id", "seq"])
-        with_lineups = sorted({r["fixture_id"] for r in lineups})
-        if with_lineups:
-            conn.execute("DELETE FROM futbol.fixture_lineups WHERE fixture_id = ANY(%s)", (with_lineups,))
-            upsert(conn, ("futbol", "fixture_lineups"), lineups, ["fixture_id", "player_id"])
-    return len(ids)
+    try:
+        with conn.transaction():
+            return _write_details(conn, parsed)
+    except (psycopg.IntegrityError, psycopg.DataError) as exc:
+        log.warning("detalle: la base rechazó el lote (%s); se guarda partido por partido", type(exc).__name__)
+    written = 0
+    for details in parsed:
+        try:
+            with conn.transaction():
+                written += _write_details(conn, [details])
+        except (psycopg.IntegrityError, psycopg.DataError) as exc:
+            log.warning("detalle del partido %s rechazado por la base: %s", details["fixture"]["id"], exc)
+    return written
 
 
 def fetch_details(conn: psycopg.Connection, api: ApiSportsClient, fixture_ids: list[int], job: str = "details") -> RunStats:

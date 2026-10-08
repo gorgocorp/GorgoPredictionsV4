@@ -4,12 +4,15 @@ Funciones puras: sin red ni base de datos, para poder probarlas aisladas.
 """
 
 import html
+import logging
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.config import LOCAL_TZ
 from app.sports.futbol.config import LEAGUES
+
+log = logging.getLogger(__name__)
 
 
 class InvalidRecord(ValueError):
@@ -111,6 +114,41 @@ def fixture_row(raw: dict[str, Any], fetched_at: datetime) -> dict[str, Any]:
     }
 
 
+def _fixture_teams(raw: dict[str, Any]) -> set[int]:
+    return {raw["teams"]["home"]["id"], raw["teams"]["away"]["id"]}
+
+
+def _block_team(raw: dict[str, Any], block: dict[str, Any], what: str) -> int | None:
+    """Equipo de un bloque de estadísticas o alineación; None (se descarta) si no es uno de los dos del partido."""
+    team_id = (block.get("team") or {}).get("id")
+    if team_id in _fixture_teams(raw):
+        return team_id
+    log.warning("partido %s: %s del equipo %s descartadas (no es de este partido)", raw["fixture"]["id"], what, team_id)
+    return None
+
+
+def _team_by_players(raw: dict[str, Any], player_ids: set[int], free: set[int]) -> int | None:
+    """Equipo del partido en el que las alineaciones y los eventos ponen a todos estos jugadores.
+
+    Sólo responde si todos los que aparecen ahí son del mismo equipo y ese equipo está en `free`.
+    """
+    teams = _fixture_teams(raw)
+    found = set()
+    for block in raw.get("lineups") or []:
+        team_id = (block.get("team") or {}).get("id")
+        if team_id in teams and any(
+            (item.get("player") or {}).get("id") in player_ids
+            for key in ("startXI", "substitutes")
+            for item in block.get(key) or []
+        ):
+            found.add(team_id)
+    for e in raw.get("events") or []:
+        team_id = (e.get("team") or {}).get("id")
+        if team_id in teams and (e.get("player") or {}).get("id") in player_ids:
+            found.add(team_id)
+    return found.pop() if len(found) == 1 and found <= free else None
+
+
 def _int(value: Any) -> int | None:
     if value is None or value == "":
         return None
@@ -153,7 +191,10 @@ def team_stats_rows(raw: dict[str, Any], fetched_at: datetime) -> list[dict[str,
         values = {s.get("type"): s.get("value") for s in block.get("statistics") or []}
         if not values:
             continue
-        row = {"fixture_id": fixture_id, "team_id": block["team"]["id"]}
+        team_id = _block_team(raw, block, "estadísticas de equipo")
+        if team_id is None:
+            continue
+        row = {"fixture_id": fixture_id, "team_id": team_id}
         for api_name, col in TEAM_STAT_FIELDS.items():
             value = _int(values.get(api_name))
             row[col] = value if value is not None or col == "possession" else 0
@@ -170,11 +211,27 @@ def player_stats_rows(
     """(jugadores, estadísticas por jugador) de un partido.
 
     Un suplente que no entró viene con minutes NULL: se guarda con 0 minutos y conteos NULL.
+
+    A veces el bloque de un equipo llega con otro ID y sin nombre (partido 1492399: Chapecoense, 132, llegó
+    como 22722, que no es ninguno de los dos). Se asigna al equipo del partido sin bloque propio si las
+    alineaciones y los eventos ponen ahí a sus jugadores; si no hay esa evidencia, el bloque se descarta.
     """
     fixture_id = raw["fixture"]["id"]
+    blocks = raw.get("players") or []
+    teams = _fixture_teams(raw)
+    free = teams - {(block.get("team") or {}).get("id") for block in blocks}
     players, stats = [], []
-    for block in raw.get("players") or []:
-        team_id = block["team"]["id"]
+    for block in blocks:
+        team_id = (block.get("team") or {}).get("id")
+        if team_id not in teams:
+            ids = {(item.get("player") or {}).get("id") for item in block.get("players") or []}
+            found = _team_by_players(raw, {i for i in ids if isinstance(i, int) and i > 0}, free)
+            if found is None:
+                log.warning("partido %s: estadísticas de jugadores del equipo %s descartadas (no es de este partido)", fixture_id, team_id)
+                continue
+            log.warning("partido %s: estadísticas de jugadores con equipo %s asignadas a %s (alineaciones y eventos)", fixture_id, team_id, found)
+            team_id = found
+            free.discard(found)
         for item in block.get("players") or []:
             player = item.get("player") or {}
             player_id = player.get("id")
@@ -253,7 +310,9 @@ def lineup_rows(
     fixture_id = raw["fixture"]["id"]
     players, rows = [], []
     for block in raw.get("lineups") or []:
-        team_id = (block.get("team") or {}).get("id")
+        team_id = _block_team(raw, block, "alineaciones")
+        if team_id is None:
+            continue
         for key, starter in (("startXI", True), ("substitutes", False)):
             for item in block.get(key) or []:
                 p = item.get("player") or {}

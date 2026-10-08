@@ -1,11 +1,19 @@
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from app.sports.futbol.ingest import normalize
 
 FETCHED = datetime(2026, 10, 6, 20, 0, tzinfo=timezone.utc)
+SAMPLES = Path(__file__).resolve().parents[1] / "fixtures" / "api_football"
+
+
+def sample_1492399() -> dict:
+    """Vitória-Chapecoense real: el bloque de jugadores de Chapecoense (132) llega como equipo 22722."""
+    return json.loads((SAMPLES / "fixture_1492399.json").read_text(encoding="utf-8"))
 
 FIXTURE = {
     "fixture": {
@@ -106,3 +114,37 @@ def test_lineup_rows():
                                    "substitutes": [{"player": {"id": 2, "name": "B. Suplente", "pos": "M", "grid": None}}]}]}
     players, rows = normalize.lineup_rows(raw, FETCHED)
     assert [(r["player_id"], r["is_starter"], r["formation"]) for r in rows] == [(1, True, "4-3-3"), (2, False, "4-3-3")]
+
+
+def test_player_block_with_foreign_team_goes_to_the_team_its_lineup_shows():
+    _, stats = normalize.player_stats_rows(sample_1492399(), FETCHED)
+    # Los de 22722 están en la alineación y los eventos de Chapecoense; el de id 0 se descarta como siempre.
+    assert {s["player_id"]: s["team_id"] for s in stats} == {80626: 132, 80173: 132, 352220: 132, 288230: 136, 10085: 136}
+    kauan = next(s for s in stats if s["player_id"] == 352220)
+    assert (kauan["minutes"], kauan["yellow"]) == (90, 1)
+
+
+def test_player_block_with_foreign_team_and_no_evidence_is_dropped(caplog):
+    raw = sample_1492399()
+    raw["lineups"], raw["events"] = [], []
+    players, stats = normalize.player_stats_rows(raw, FETCHED)
+    assert {s["player_id"]: s["team_id"] for s in stats} == {288230: 136, 10085: 136}
+    assert [p["id"] for p in players] == [288230, 10085]
+    assert "22722" in caplog.text
+
+
+def test_player_block_is_not_moved_to_a_team_that_already_has_one():
+    raw = sample_1492399()
+    raw["lineups"][1]["team"]["id"] = 136  # sus jugadores aparecerían con Vitória, que ya trae su propio bloque
+    raw["events"] = []
+    _, stats = normalize.player_stats_rows(raw, FETCHED)
+    assert {s["team_id"] for s in stats} == {136}
+
+
+def test_team_stats_and_lineups_of_a_team_outside_the_fixture_are_dropped():
+    raw = sample_1492399()
+    assert [r["team_id"] for r in normalize.team_stats_rows(raw, FETCHED)] == [136, 132]
+    raw["statistics"][1]["team"]["id"] = 22722
+    raw["lineups"][1]["team"]["id"] = 22722
+    assert [r["team_id"] for r in normalize.team_stats_rows(raw, FETCHED)] == [136]
+    assert {r["team_id"] for r in normalize.lineup_rows(raw, FETCHED)[1]} == {136}
