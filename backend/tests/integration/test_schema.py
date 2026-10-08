@@ -78,6 +78,24 @@ def test_pick_markets_belong_to_their_sport(db):
                 add_pick(db, sport, match, market, side)
 
 
+def test_pick_first_price_is_complete(db):
+    add_nba_game(db, 5500)
+    sync_nba(db)
+    pick = add_pick(db, "nba", match_id(db, "nba", 5500), "ml", "home")
+    set_first = "UPDATE core.picks SET first_odd = %s, first_p_model = %s, first_p_market = %s, first_priced_at = {} WHERE id = %s"
+    db.execute(set_first.format("evaluated_at"), (2.1, 0.55, None, pick))  # sin probabilidad del mercado: válido
+    for odd, p_model, p_market, priced_at in (
+        (2.1, None, None, "evaluated_at"),  # momio sin probabilidad del modelo
+        (None, None, 0.5, "NULL"),  # probabilidad del mercado sin momio
+        (2.1, 0.55, None, "NULL"),  # momio sin hora
+        (2.1, 0.55, None, "evaluated_at + interval '1 hour'"),  # publicado después de su última evaluación
+        (1.0, 0.55, None, "evaluated_at"),  # momio inválido
+    ):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            with db.transaction():
+                db.execute(set_first.format(priced_at), (odd, p_model, p_market, pick))
+
+
 def test_pick_sport_must_be_its_match_sport(db):
     add_nba_game(db, 6000)
     sync_nba(db)

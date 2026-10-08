@@ -19,6 +19,13 @@ export function signedPct(p: number | null | undefined, digits = 1): string {
   return p > 0 ? `+${v}%` : `${v}%`;
 }
 
+/** Diferencia de probabilidades en puntos porcentuales: 0.012 -> "+1.2 pts". */
+export function signedPts(p: number | null | undefined, digits = 1): string {
+  if (p === null || p === undefined) return "—";
+  const v = (p * 100).toFixed(digits);
+  return p > 0 ? `+${v} pts` : `${v} pts`;
+}
+
 export function american(decimal: number): string {
   if (decimal >= 2) return `+${Math.round((decimal - 1) * 100)}`;
   return `${Math.round(-100 / (decimal - 1))}`;

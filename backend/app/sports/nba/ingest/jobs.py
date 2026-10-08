@@ -117,20 +117,21 @@ def ingest_game_stats(conn: psycopg.Connection, api: ApiSportsClient, season: st
     return run
 
 
-def _upcoming_games(conn: psycopg.Connection, now: datetime) -> list[int]:
+def _upcoming_games(conn: psycopg.Connection, now: datetime, window: timedelta) -> list[int]:
     return [
         r["id"]
         for r in conn.execute(
             "SELECT id FROM nba.games WHERE status = 'NS' AND starts_at BETWEEN %s AND %s ORDER BY starts_at",
-            (now, now + ODDS_WINDOW),
+            (now, now + window),
         )
     ]
 
 
-def ingest_odds(conn: psycopg.Connection, api: ApiSportsClient) -> RunStats:
-    """Momios de los partidos programados en los próximos 7 días, uno por consulta."""
-    with ingest_run(conn, api, SPORT, "odds") as run:
-        for game_id in _upcoming_games(conn, now_utc()):
+def ingest_odds(conn: psycopg.Connection, api: ApiSportsClient, window: timedelta = ODDS_WINDOW) -> RunStats:
+    """Momios de los partidos programados dentro de `window` (por defecto, los próximos 7 días), uno por consulta."""
+    params = {} if window == ODDS_WINDOW else {"window_minutes": int(window.total_seconds() // 60)}
+    with ingest_run(conn, api, SPORT, "odds", **params) as run:
+        for game_id in _upcoming_games(conn, now_utc(), window):
             seen_at = now_utc()
             raw = api.get("/odds", game=game_id)
             rows = [row for item in raw for row in normalize.odds_rows(item)]

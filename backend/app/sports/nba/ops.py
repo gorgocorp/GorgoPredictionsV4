@@ -37,6 +37,14 @@ def pregame_sync(within: timedelta) -> None:
     sync()
 
 
+def closing_sync(within: timedelta) -> None:
+    """Lectura de cierre: momios de lo que empieza dentro de `within` y reporte de lesiones (no gasta cuota)."""
+    with connect() as conn, jobs.client() as api:
+        jobs.ingest_odds(conn, api, within)
+        log.info("nba: cierre terminado; solicitudes usadas: %d", api.requests_made)
+        sync_injuries(conn)
+
+
 def odds() -> str:
     with connect() as conn, jobs.client() as api:
         run = jobs.ingest_odds(conn, api)

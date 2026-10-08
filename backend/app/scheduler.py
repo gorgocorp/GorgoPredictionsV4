@@ -5,6 +5,9 @@
 - Corridas previas antes de cada horario de partidos, con la anticipación de cada deporte: sólo el
   deporte de esos partidos, con su corrida previa (fútbol: alineaciones, bajas y momios de lo que
   empieza pronto; NBA: sincronización completa) y registro de hoy y mañana.
+- Lectura de cierre (si el deporte la tiene), más cerca del inicio: sólo momios de lo que empieza
+  pronto y registro de hoy y mañana, para que cada pick quede con el último momio y la probabilidad
+  del mercado previos al partido (el cierre del CLV).
 - Cada deporte corre aislado: si uno falla (p. ej. venció su plan de la API), los demás siguen.
 """
 
@@ -13,7 +16,7 @@ import logging
 import os
 import time
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 
 import psycopg
@@ -24,14 +27,25 @@ from app.db import connect, migrate
 
 log = logging.getLogger("gorgo.scheduler")
 
-# Se omite una previa si la corrida anterior del mismo deporte fue hace menos de MIN_GAP; los partidos
-# que empiezan dentro de PREGAME_GROUP de la previa se atienden en la misma corrida.
+# Se omite una previa si la última sincronización (regular o previa) del mismo deporte fue hace menos de
+# MIN_GAP, y un cierre si fue hace menos de CLOSING_MIN_GAP (esa corrida ya leyó los momios); los partidos
+# que empiezan dentro de PREGAME_GROUP de la corrida se atienden en la misma.
 PREGAME_LOOKAHEAD = timedelta(hours=36)
 MIN_GAP = timedelta(minutes=20)
+CLOSING_MIN_GAP = timedelta(minutes=10)
 PREGAME_GROUP = timedelta(minutes=30)
-# Deportes cuya próxima corrida cae a pocos minutos de otra se atienden juntos.
+# Deportes cuya próxima corrida cae a pocos minutos de otra se atienden juntos. Dentro de un deporte, una
+# previa que cae a pocos minutos de un cierre lo cubre (también lee momios) y se adelanta.
 WAKE_TOLERANCE = timedelta(minutes=5)
 EPOCH = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def pregame_stages(sport: Sport) -> list[tuple[str, timedelta]]:
+    """Corridas antes de cada horario de partidos del deporte: [(tipo, anticipación)]."""
+    stages = [("previa", sport.pregame_lead)]
+    if sport.closing_lead is not None:
+        stages.append(("cierre", sport.closing_lead))
+    return stages
 
 
 def next_runs(
@@ -39,12 +53,13 @@ def next_runs(
     now: datetime,
     last_runs: Mapping[str, datetime],
     interval: timedelta,
-    leads: Mapping[str, timedelta],
+    stages: Mapping[str, Sequence[tuple[str, timedelta]]],
 ) -> tuple[datetime, dict[str, str]]:
-    """Próxima corrida: (cuándo, {deporte: "regular" | "previa"}) de los deportes que tocan entonces.
+    """Próxima corrida: (cuándo, {deporte: "regular" | "previa" | "cierre"}) de los deportes que tocan entonces.
 
-    Para cada deporte, la regular (cada `interval` desde su última corrida) o la previa a su siguiente
-    horario de partidos si llega antes.
+    Para cada deporte, la regular (cada `interval` desde su última sincronización) o la corrida previa a su
+    siguiente horario de partidos (previa o cierre, según `stages`) si llega antes. `last_runs` son las
+    últimas sincronizaciones de cada deporte (regular o previa; un cierre sólo lee momios).
     """
     starts: dict[str, list[datetime]] = defaultdict(list)
     for r in conn.execute(
@@ -53,21 +68,25 @@ def next_runs(
         WHERE status = 'NS' AND starts_at BETWEEN %s AND %s AND sport = ANY(%s)
         ORDER BY starts_at
         """,
-        (now, now + PREGAME_LOOKAHEAD, list(leads)),
+        (now, now + PREGAME_LOOKAHEAD, list(stages)),
     ).fetchall():
         starts[r["sport"]].append(r["starts_at"])
 
     plans: dict[str, tuple[datetime, str]] = {}
-    for sport, lead in leads.items():
-        regular = last_runs.get(sport, EPOCH) + interval
-        plan = (regular, "regular")
-        for start in starts.get(sport, []):
-            pregame = start - lead
-            if pregame <= now or pregame - last_runs.get(sport, EPOCH) < MIN_GAP:
-                continue
-            if pregame < regular:
-                plan = (pregame, "previa")
-            break
+    for sport, sport_stages in stages.items():
+        last = last_runs.get(sport, EPOCH)
+        plan = (last + interval, "regular")
+        pending = [
+            (start - lead, kind)
+            for start in starts.get(sport, [])
+            for kind, lead in sport_stages
+            if start - lead > now and start - lead - last >= (MIN_GAP if kind == "previa" else CLOSING_MIN_GAP)
+        ]
+        if pending:
+            first = min(when for when, _ in pending)
+            if first < plan[0]:
+                close_by = {kind for when, kind in pending if when <= first + WAKE_TOLERANCE}
+                plan = (first, "previa" if "previa" in close_by else "cierre")
         plans[sport] = plan
     wake = min(when for when, _ in plans.values())
     return wake, {sport: kind for sport, (when, kind) in plans.items() if when <= wake + WAKE_TOLERANCE}
@@ -90,6 +109,8 @@ def run_once(sports: Mapping[str, Sport], due: Mapping[str, str], last_full: dic
             if full:
                 _ops(sport).sync()
                 last_full[key] = started
+            elif kind == "cierre":
+                _ops(sport).closing_sync(sport.closing_lead + PREGAME_GROUP)
             else:
                 _ops(sport).pregame_sync(sport.pregame_lead + PREGAME_GROUP)
         except Exception:
@@ -114,20 +135,21 @@ def run_once(sports: Mapping[str, Sport], due: Mapping[str, str], last_full: dic
 
 def run_forever(sports: Mapping[str, Sport]) -> None:
     interval = timedelta(hours=float(os.getenv("SYNC_INTERVAL_HOURS", "6")))
-    leads = {key: sport.pregame_lead for key, sport in sports.items()}
+    stages = {key: pregame_stages(sport) for key, sport in sports.items()}
     with connect() as conn:
         migrate(conn)
-    last_runs: dict[str, datetime] = {}
+    last_runs: dict[str, datetime] = {}  # últimas sincronizaciones (regular o previa)
     last_full: dict[str, datetime] = {}
     due = {key: "regular" for key in sports}  # arranque: sincronización completa de todo
     while True:
         started = datetime.now(timezone.utc)
         run_once(sports, due, last_full, interval)
-        for key in due:
-            last_runs[key] = started
+        for key, kind in due.items():
+            if kind != "cierre":
+                last_runs[key] = started
         try:
             with connect() as conn:
-                wake, due = next_runs(conn, datetime.now(timezone.utc), last_runs, interval, leads)
+                wake, due = next_runs(conn, datetime.now(timezone.utc), last_runs, interval, stages)
         except Exception:
             log.exception("no se pudo calcular la próxima corrida; se usa el ciclo regular")
             wake, due = started + interval, {key: "regular" for key in sports}

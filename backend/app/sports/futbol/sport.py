@@ -3,7 +3,7 @@
 import os
 from datetime import date, timedelta
 
-from app.core.sport import Sport
+from app.core.sport import Sport, minutes_env
 from app.sports.futbol.engine import tracking
 from app.sports.futbol.engine.evidence import CANCELLED, FINISHED, leg_outcome
 from app.sports.futbol.engine.history import History, load_history
@@ -28,6 +28,8 @@ SPORT = Sport(
     # Hoy y los 6 días siguientes, para armar parlays de una jornada o de un fin de semana.
     record_days=int(os.getenv("FUTBOL_RECORD_DAYS", "7")),
     pregame_lead=timedelta(minutes=float(os.getenv("FUTBOL_PREGAME_LEAD_MINUTES", "45"))),
+    # La previa ya lee momios después de las alineaciones (~60 min antes): sin lectura de cierre aparte.
+    closing_lead=minutes_env("FUTBOL_CLOSING_LEAD_MINUTES", "0"),
     load_history=load_history,
     has_matches=has_matches,
     models_cutoff=tracking.models_day,

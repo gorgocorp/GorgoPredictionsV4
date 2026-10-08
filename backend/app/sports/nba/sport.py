@@ -3,7 +3,7 @@
 import os
 from datetime import date, timedelta
 
-from app.core.sport import Sport
+from app.core.sport import Sport, minutes_env
 from app.sports.nba.engine import tracking
 from app.sports.nba.engine.evidence import CANCELLED, FINISHED, leg_outcome
 from app.sports.nba.engine.history import History, load_history
@@ -34,6 +34,8 @@ SPORT = Sport(
     store_range_unpriced=tracking.STORE_RANGE_UNPRICED,
     record_days=2,  # hoy y mañana
     pregame_lead=timedelta(minutes=float(os.getenv("NBA_PREGAME_LEAD_MINUTES", "60"))),
+    # Las bajas de última hora mueven el momio después de la previa (60 min antes).
+    closing_lead=minutes_env("NBA_CLOSING_LEAD_MINUTES", "15"),
     load_history=load_history,
     has_matches=has_matches,
     models_cutoff=models_cutoff,

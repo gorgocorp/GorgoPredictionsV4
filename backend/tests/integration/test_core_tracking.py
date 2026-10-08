@@ -8,10 +8,11 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 
 import pandas as pd
+import pytest
 
 from app.core.bets import LegInput, create_bet, list_bets
 from app.core.parlay import Candidate
-from app.core.tracking import record_picks, settle_all
+from app.core.tracking import performance_data, record_picks, settle_all
 from app.sports import all_sports
 from app.sports.futbol.engine.legs import LegSpec as FutbolLeg
 from app.sports.futbol.matches import sync_matches as sync_futbol
@@ -140,3 +141,112 @@ def test_settles_both_sports_and_a_mixed_bet(db):
         ("futbol", "Fútbol 132 vs Fútbol 133", "Terminó Fútbol 132 2-1 Fútbol 133"),
     ]
     assert bets["summary"]["won"] == 1
+
+
+# ---------------------------------------------------------------- momio de publicación y CLV
+
+CLOSE = datetime(2026, 10, 21, 23, 20, tzinfo=timezone.utc)  # 10 min antes del primer partido
+
+
+def priced(match: int, starts: str, legs: list[tuple]) -> Card:
+    """Tarjeta con piernas (spec, descripción, p_modelo, momio, p_mercado)."""
+    return Card(
+        match,
+        pd.Timestamp(starts),
+        [Candidate("nba", match, "A vs B", spec, desc, p, odd=odd, bookmaker="Bet365" if odd else None, p_market=pm)
+         for spec, desc, p, odd, pm in legs],
+    )
+
+
+def test_first_price_is_kept_and_the_last_price_is_the_close(db):
+    add_nba_game(db, 1001, starts=EARLY)
+    publish = [priced(1001, EARLY, [
+        (NbaLeg("ml", "home"), "Gana local", 0.55, 2.10, 0.47),
+        (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, None, None),  # todavía sin momio
+    ])]
+    close = [priced(1001, EARLY, [
+        (NbaLeg("ml", "home"), "Gana local", 0.58, 1.90, 0.52),
+        (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.66, 1.95, 0.50),
+    ])]
+    record_picks(db, with_engine("nba", publish), None, DAY, "Bet365", now=BEFORE)
+    record_picks(db, with_engine("nba", close), None, DAY, "Bet365", now=CLOSE)
+    # Ya empezó: una corrida posterior no toca nada.
+    record_picks(db, with_engine("nba", publish), None, DAY, "Bet365", now=BETWEEN)
+
+    rows = {
+        r["description"]: r
+        for r in db.execute(
+            """
+            SELECT description, odd::float, p_market::float, evaluated_at, first_odd::float,
+                   first_p_model::float, first_p_market::float, first_priced_at
+            FROM core.picks
+            """
+        )
+    }
+    home, over = rows["Gana local"], rows["Más de 220.5"]
+    assert (home["first_odd"], home["first_p_model"], home["first_p_market"], home["first_priced_at"]) == (2.10, 0.55, 0.47, BEFORE)
+    assert (home["odd"], home["p_market"], home["evaluated_at"]) == (1.90, 0.52, CLOSE)
+    # Sin momio al publicarse: su momio de publicación es el primero que tuvo.
+    assert (over["first_odd"], over["first_p_model"], over["first_priced_at"]) == (1.95, 0.66, CLOSE)
+
+
+def test_performance_reports_clv_against_the_close(db):
+    add_nba_game(db, 1001, starts=EARLY)
+    add_nba_game(db, 1002, starts=LATE, home=134, away=135)  # su última evaluación queda lejos del inicio
+    late = (NbaLeg("ml", "home"), "Gana local 1002", 0.60, 2.00, 0.50)
+    publish = [
+        priced(1001, EARLY, [
+            (NbaLeg("ml", "home"), "Gana local", 0.55, 2.10, 0.47),
+            (NbaLeg("ml", "away"), "Gana visitante", 0.45, 1.80, 0.53),
+            (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, None, None),
+        ]),
+        priced(1002, LATE, [late]),
+    ]
+    close = [
+        priced(1001, EARLY, [
+            (NbaLeg("ml", "home"), "Gana local", 0.58, 1.90, 0.52),
+            (NbaLeg("ml", "away"), "Gana visitante", 0.42, 1.95, 0.48),
+            (NbaLeg("total", "over", 220.5), "Más de 220.5", 0.65, 1.95, 0.50),
+        ]),
+        priced(1002, LATE, [late]),
+    ]
+    record_picks(db, with_engine("nba", publish), None, DAY, "Bet365", now=BEFORE)
+    record_picks(db, with_engine("nba", close), None, DAY, "Bet365", now=CLOSE)
+
+    # Gana el local 110-100 en los dos partidos; el total (210) no pasa de 220.5.
+    db.execute("UPDATE nba.games SET status = 'FT', home_total = 110, away_total = 100 WHERE id IN (1001, 1002)")
+    sync_nba(db, [1001, 1002])
+    settle_all(db, [all_sports()["nba"]], now=AFTER)
+
+    data = performance_data(db, all_sports()["nba"], include_preseason=True)
+    clv = data["clv"]
+    # CLV = momio de publicación × probabilidad del cierre − 1. Con valor al publicarse: local (0.55 × 2.10) y
+    # el total (0.65 × 1.95); el visitante (0.45 × 1.80) no.
+    assert clv["value"]["n"] == 2
+    assert clv["value"]["avg"] == pytest.approx(((2.10 * 0.52 - 1) + (1.95 * 0.50 - 1)) / 2)
+    assert clv["value"]["beat_rate"] == 0.5
+    # El mercado se movió 5 pts a favor del local; el total se publicó en el cierre (sin movimiento).
+    assert clv["value"]["avg_move"] == pytest.approx((0.05 + 0) / 2)
+    assert clv["value"]["n_move"] == 2
+    assert clv["all"]["n"] == 3
+    assert clv["all"]["avg"] == pytest.approx(((2.10 * 0.52 - 1) + (1.80 * 0.48 - 1) + (1.95 * 0.50 - 1)) / 3)
+    assert clv["hours_before"] == pytest.approx(11.5)  # mediana de 11.5, 11.5 y 10 min
+    assert clv["without_close"] == 1  # el del segundo partido: evaluado 2 h 40 min antes del inicio
+    by_market = {m["market"]: (m["clv_n"], m["clv"]) for m in data["by_market"]}
+    assert by_market["ml"] == (1, pytest.approx(2.10 * 0.52 - 1))
+    assert by_market["total"] == (1, pytest.approx(1.95 * 0.50 - 1))
+
+
+def test_performance_without_first_prices_has_no_clv(db):
+    # Piernas registradas antes de guardar el momio de publicación (o importadas): sin CLV.
+    add_nba_game(db, 1001, starts=EARLY)
+    record_picks(db, with_engine("nba", [nba_legs(1001, EARLY)]), None, DAY, "Bet365", now=BEFORE)
+    db.execute("UPDATE core.picks SET first_odd = NULL, first_p_model = NULL, first_p_market = NULL, first_priced_at = NULL")
+    db.execute("UPDATE nba.games SET status = 'FT', home_total = 110, away_total = 100 WHERE id = 1001")
+    sync_nba(db, [1001])
+    settle_all(db, [all_sports()["nba"]], now=AFTER)
+
+    data = performance_data(db, all_sports()["nba"], include_preseason=True)
+    assert data["legs"]["settled"] == 3
+    assert data["clv"] is None
+    assert all(m["clv"] is None and m["clv_n"] == 0 for m in data["by_market"])

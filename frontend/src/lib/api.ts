@@ -130,14 +130,35 @@ export interface ParlayPerformance {
   roi: number | null;
 }
 
+/** CLV de un grupo de piernas: momio de publicación × probabilidad sin comisión del cierre − 1. */
+export interface ClvSummary {
+  n: number;
+  avg: number;
+  beat_rate: number;
+  n_move: number;
+  /** Probabilidad del mercado al cierre − al publicarse (null si ninguna la tenía al publicarse). */
+  avg_move: number | null;
+}
+
+export interface ClvData {
+  /** Piernas con valor al publicarse (probabilidad del modelo × momio > 1). */
+  value: ClvSummary | null;
+  /** Todas las piernas con momio y cierre (referencia: incluye los dos lados de cada mercado). */
+  all: ClvSummary | null;
+  hours_before: number | null;
+  without_close: number;
+  close_max_minutes: number;
+}
+
 export interface Performance {
   sport: SportKey;
   filters: Record<string, unknown>;
   legs: { settled: number; void: number; won: number };
-  by_market: { market: string; n: number; predicted: number; actual: number }[];
+  by_market: { market: string; n: number; predicted: number; actual: number; clv_n: number; clv: number | null }[];
   calibration: CalibrationBin[];
   model_vs_market: { n: number; brier_model: number; brier_market: number } | null;
   positive_ev: { n: number; hit_rate: number; avg_odd: number; profit: number; roi: number } | null;
+  clv: ClvData | null;
   parlays: ParlayPerformance[];
 }
 

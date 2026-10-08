@@ -57,7 +57,7 @@ Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos 
 | `picks --sport X [--date D] [--bookmaker Bet365\|1xBet\|best]` | Piernas y parlays de un día (texto) |
 | `record-picks --sport X [--date D]` | Guarda piernas y parlays de un día (lo hace el scheduler) |
 | `settle [--sport X]` | Liquida piernas, parlays y tus apuestas (lo hace el scheduler) |
-| `performance --sport nba [--include-preseason]` · `--sport futbol [--league ID]` | Rendimiento real |
+| `performance --sport nba [--include-preseason]` · `--sport futbol [--league ID]` | Rendimiento real, con CLV |
 | `backtest --sport X [--start --end --every N --teams-only]` | Evalúa los modelos día por día |
 | `scheduler [--sport X]` | Sincroniza, liquida y registra picks periódicamente |
 
@@ -120,6 +120,25 @@ probabilidades, momios y proyecciones que los proyectos anteriores (diferencia m
 
 Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían registrado para el 7-oct
 (3,010 piernas y 4 parlays de NBA; 1,330 piernas y 10 parlays de fútbol, sin una sola diferencia).
+
+## Momios de publicación, cierre y CLV
+
+- **Cuándo se leen los momios** (scheduler): en el ciclo regular (`SYNC_INTERVAL_HOURS`), en la previa de cada
+  horario de partidos (`NBA_PREGAME_LEAD_MINUTES`=60: sincronización completa; `FUTBOL_PREGAME_LEAD_MINUTES`=45:
+  alineaciones, bajas y momios) y en la **lectura de cierre** (`NBA_CLOSING_LEAD_MINUTES`=15: sólo momios y reporte
+  de lesiones; `FUTBOL_CLOSING_LEAD_MINUTES`=0, apagada: la previa de fútbol ya lee después de las alineaciones).
+  Cada corrida vuelve a registrar los picks de hoy y mañana.
+- **Momio de publicación**: la primera vez que una pierna se registra con momio de `BOOKMAKER`, `core.picks` guarda
+  `first_odd`, `first_p_model`, `first_p_market` y `first_priced_at`, que ya no cambian. `odd`, `p_model` y `p_market`
+  siguen actualizándose hasta que empieza el partido: quedan con los del cierre.
+- **CLV** (Rendimiento y `performance`): momio de publicación × probabilidad sin comisión del mercado al cierre − 1
+  (Pinnacle si cotiza el mercado completo; si no, la mediana de las casas). Sólo cuentan las piernas cuya última
+  evaluación fue a 90 min o menos del inicio. El que mide al modelo es el de las **piernas con valor al publicarse**
+  (probabilidad del modelo × momio > 1); el de todas las piernas es sólo referencia (incluye los dos lados de cada
+  mercado y ronda menos la comisión de la casa). Las piernas de partidos que empezaron antes de este cambio
+  (7-oct-2026) no tienen momio de publicación; las de partidos pendientes lo tomaron en la primera corrida después.
+- Límite conocido: si una casa retira una selección, la vista `v_odds_latest` sigue dando su último momio. En los
+  datos del 6 y 7-oct pasó en 51 de ~124 mil selecciones de fútbol y en ninguna de NBA.
 
 ## Base de datos
 

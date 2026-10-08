@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { EmptyState, ErrorState, Skeleton } from "../components/States";
-import { api, type CalibrationBin, type Performance, type PerformanceFilters } from "../lib/api";
+import { api, type CalibrationBin, type ClvSummary, type Performance, type PerformanceFilters } from "../lib/api";
 import { BACKTESTS } from "../lib/backtest";
-import { pct, signedPct } from "../lib/format";
+import { pct, signedPct, signedPts } from "../lib/format";
 import { useSportContext } from "../lib/sportContext";
 import { SPORT_KEYS, SPORTS, type SportConfig } from "../lib/sports";
 
@@ -69,6 +69,7 @@ function CalibrationChart({ bins }: { bins: CalibrationBin[] }) {
 
 function Kpis({ data }: { data: Performance }) {
   const { legs, model_vs_market: mvm, positive_ev: ev } = data;
+  const clv = data.clv?.value ?? null;
   return (
     <div className="kpis">
       <div className="card kpi">
@@ -92,7 +93,81 @@ function Kpis({ data }: { data: Performance }) {
           {ev ? `ROI · ${ev.n} piernas · ${pct(ev.hit_rate, 1)} acierto · ganancia ${ev.profit >= 0 ? "+" : ""}${ev.profit.toFixed(1)} u` : "Sin piernas con valor liquidadas"}
         </span>
       </div>
+      <div className="card kpi">
+        <span className="stat-label">CLV de piernas con valor</span>
+        <span className={`kpi-value ${clv && clv.avg > 0 ? "ev-pos" : ""}`}>{clv ? signedPct(clv.avg) : "—"}</span>
+        <span className="muted xs">
+          {clv ? `${pct(clv.beat_rate)} le ganan al cierre · ${clv.n} piernas` : "Requiere piernas con momio de publicación y cierre"}
+        </span>
+      </div>
     </div>
+  );
+}
+
+function ClvSection({ data }: { data: Performance }) {
+  const clv = data.clv;
+  const rows: [string, ClvSummary | null][] = clv
+    ? [
+        ["Con valor al publicarse", clv.value],
+        ["Todas con momio (referencia)", clv.all],
+      ]
+    : [];
+  return (
+    <section className="card card-pad" aria-labelledby="clv-title">
+      <h2 id="clv-title">Valor contra el cierre (CLV)</h2>
+      <p className="muted small">
+        Compara el momio con el que se publicó cada pierna contra la probabilidad sin comisión del mercado justo antes del
+        partido (Pinnacle si la cotiza). Positivo = se publicó a mejor precio que el cierre: es la señal más rápida de que
+        el modelo ve algo antes que el mercado, aunque los resultados todavía tengan mucha suerte.
+      </p>
+      {!clv ? (
+        <p className="muted small">
+          Todavía no hay piernas liquidadas con momio de publicación. Las registradas antes de que se guardara no lo tienen.
+        </p>
+      ) : (
+        <>
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th scope="col">Piernas</th>
+                  <th scope="col" className="r">
+                    Con cierre
+                  </th>
+                  <th scope="col" className="r">
+                    CLV promedio
+                  </th>
+                  <th scope="col" className="r">
+                    Le ganan al cierre
+                  </th>
+                  <th scope="col" className="r">
+                    Mercado a favor
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(([label, s]) => (
+                  <tr key={label}>
+                    <td>{label}</td>
+                    <td className="r num">{s ? s.n.toLocaleString("es-MX") : 0}</td>
+                    <td className={`r num ${s && s.avg > 0 ? "ev-pos" : ""}`}>{s ? signedPct(s.avg) : "—"}</td>
+                    <td className="r num">{s ? pct(s.beat_rate, 1) : "—"}</td>
+                    <td className="r num">{s ? signedPts(s.avg_move) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted xs" style={{ marginBottom: 0 }}>
+            {clv.hours_before !== null && `Publicadas ${clv.hours_before.toFixed(1)} h antes del partido (mediana). `}
+            La referencia ronda menos la comisión de la casa porque incluye los dos lados de cada mercado. Mercado a favor =
+            cuánto subió la probabilidad del mercado para esa pierna entre la publicación y el cierre.
+            {clv.without_close > 0 &&
+              ` ${clv.without_close.toLocaleString("es-MX")} piernas no cuentan: su última lectura fue a más de ${clv.close_max_minutes} min del inicio.`}
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -120,6 +195,9 @@ function ByMarket({ data, config }: { data: Performance; config: SportConfig }) 
               <th scope="col" className="r">
                 Diferencia
               </th>
+              <th scope="col" className="r">
+                CLV con valor
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -130,6 +208,9 @@ function ByMarket({ data, config }: { data: Performance; config: SportConfig }) 
                 <td className="r num">{pct(m.predicted, 1)}</td>
                 <td className="r num">{pct(m.actual, 1)}</td>
                 <td className="r num">{signedPct(m.actual - m.predicted)}</td>
+                <td className={`r num ${m.clv !== null && m.clv > 0 ? "ev-pos" : ""}`}>
+                  {m.clv === null ? "—" : `${signedPct(m.clv)} (${m.clv_n})`}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -211,6 +292,7 @@ export function PerformancePage() {
             <Skeleton height={96} />
             <Skeleton height={96} />
             <Skeleton height={96} />
+            <Skeleton height={96} />
           </div>
           <Skeleton height={320} />
         </>
@@ -224,6 +306,7 @@ export function PerformancePage() {
       ) : (
         <>
           <Kpis data={perf.data} />
+          <ClvSection data={perf.data} />
           <ByMarket data={perf.data} config={config} />
           <div className="perf-grid">
             <section className="card card-pad" aria-labelledby="calib-title">

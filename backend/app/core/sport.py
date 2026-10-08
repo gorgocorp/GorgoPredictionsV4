@@ -4,6 +4,7 @@ apuestas, historial y rendimiento.
 Cada deporte lo implementa en app/sports/<deporte>/sport.py con sus propios modelos, tablas y textos.
 """
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -24,6 +25,9 @@ class Sport:
     store_range_unpriced: tuple[float, float]
     record_days: int  # días con picks registrados en cada sincronización completa (hoy incluido)
     pregame_lead: timedelta  # corrida extra antes de cada horario de partidos
+    # Lectura de cierre antes de cada horario de partidos (None: sin ella): sólo momios, y los picks quedan con el
+    # último momio y la probabilidad del mercado previos al partido, contra los que se mide el CLV.
+    closing_lead: timedelta | None
 
     # Historial y modelos.
     load_history: Callable[[psycopg.Connection], Any]
@@ -52,3 +56,9 @@ class Sport:
 
     # Expresión booleana sobre m (core.matches): el partido es de pretemporada. Sólo si el deporte la tiene.
     preseason_sql: str | None = None
+
+
+def minutes_env(name: str, default: str) -> timedelta | None:
+    """Anticipación en minutos desde el entorno; 0 (o menos) la desactiva."""
+    minutes = float(os.getenv(name, default))
+    return timedelta(minutes=minutes) if minutes > 0 else None
