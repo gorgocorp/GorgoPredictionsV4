@@ -22,10 +22,14 @@ LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TIMEZONE", "America/Mexico_City"))
 # Casa de la API con la que el sistema registra y mide sus picks y parlays.
 BOOKMAKER = os.getenv("BOOKMAKER", "Bet365").strip()
 
+# Casa de referencia del mercado: cobra poca comisión y acepta a los apostadores profesionales. Su probabilidad
+# sin comisión es la del mercado cuando cotiza el mercado completo, y la única contra la que se mide el CLV.
+SHARP_BOOKMAKER = "Pinnacle"
+
 # Casas de la API cuyos momios se guardan en cada pierna (la interfaz deja elegir con cuál comparar).
 # Nombres como los dan /bookmakers (API-Basketball) y /odds/bookmakers (API-Football).
 PRICE_BOOKMAKERS = list(
-    dict.fromkeys([BOOKMAKER] + [b.strip() for b in os.getenv("PRICE_BOOKMAKERS", "Bet365,1xBet").split(",") if b.strip()])
+    dict.fromkeys([BOOKMAKER] + [b.strip() for b in os.getenv("PRICE_BOOKMAKERS", "Bet365,1xBet,Pinnacle").split(",") if b.strip()])
 )
 
 

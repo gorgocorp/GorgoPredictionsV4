@@ -52,6 +52,7 @@ def test_meta_lists_both_sports(client):
     body = client.get("/api/meta").json()
     assert list(body["sports"]) == ["nba", "futbol"]
     assert body["sports"]["futbol"]["leagues"][0]["name"] == "Liga MX"
+    assert body["sharp_bookmaker"] == "Pinnacle"
 
 
 def test_day_views_by_sport(client):

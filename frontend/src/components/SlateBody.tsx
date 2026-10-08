@@ -249,6 +249,7 @@ export function SlateBody<G extends SlateGame>({
         bookmaker={priceBook}
         bookmakers={bookmakers}
         systemBook={bookmaker}
+        sharpBook={meta.data?.sharp_bookmaker ?? ""}
         leagues={meta.data?.sports[config.key].leagues ?? []}
       />
       <AvailabilityPanel game={gameList.find((g) => g.id === absencesGameId) ?? null} onClose={closeAbsences} />

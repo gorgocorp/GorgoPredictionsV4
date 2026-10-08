@@ -19,7 +19,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS
+from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS, SHARP_BOOKMAKER
 from app.core.bets import BetError, LegInput, create_bet, delete_bet, list_bets
 from app.core.evidence import summarize
 from app.core.sport import Sport
@@ -59,6 +59,7 @@ def meta() -> dict:
     return {
         "bookmaker": BOOKMAKER,
         "bookmakers": PRICE_BOOKMAKERS,
+        "sharp_bookmaker": SHARP_BOOKMAKER,
         "today": _now().date().isoformat(),
         "timezone": str(LOCAL_TZ),
         "sports": sports,

@@ -8,9 +8,8 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from app.config import SHARP_BOOKMAKER
 from app.sports.futbol.engine.legs import LegSpec
-
-SHARP_BOOKMAKER = "Pinnacle"
 
 # Mercados de partido completo (90 minutos) por bet_id, verificados con momios reales.
 TEAM_BETS = {

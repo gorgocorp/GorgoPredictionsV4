@@ -26,6 +26,11 @@ export function signedPts(p: number | null | undefined, digits = 1): string {
   return p > 0 ? `+${v} pts` : `${v} pts`;
 }
 
+/** "Bet365, 1xBet o Pinnacle". */
+export function orList(items: string[]): string {
+  return new Intl.ListFormat("es-MX", { type: "disjunction" }).format(items);
+}
+
 export function american(decimal: number): string {
   if (decimal >= 2) return `+${Math.round((decimal - 1) * 100)}`;
   return `${Math.round(-100 / (decimal - 1))}`;

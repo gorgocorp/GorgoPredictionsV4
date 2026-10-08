@@ -107,6 +107,8 @@ export interface Meta {
   bookmaker: string;
   /** Casas de la API cuyos momios se guardan en cada pierna. */
   bookmakers: string[];
+  /** Casa de referencia del mercado (casi sin comisión): contra su cierre se mide el CLV. */
+  sharp_bookmaker: string;
   today: string;
   timezone: string;
   sports: Record<SportKey, SportMeta>;

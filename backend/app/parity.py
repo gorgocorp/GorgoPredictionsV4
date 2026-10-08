@@ -166,9 +166,14 @@ def compare(sport: str, day: date, old: list[dict], new: list[dict]) -> ParityRe
         result.problems.append(f"piernas distintas: {len(only_old)} sólo en el anterior, {len(only_new)} sólo en V4 (p. ej. {sorted(only_old | only_new)[:3]})")
     for key in set(old_legs) & set(new_legs):
         o, n = old_legs[key], new_legs[key]
-        for name in ("description", "odd", "bookmaker", "book_odds", "hits", "player_status"):
+        for name in ("description", "odd", "bookmaker", "hits", "player_status"):
             if o[name] != n[name]:
                 result.problems.append(f"pierna {key}: {name} {o[name]!r} vs {n[name]!r}")
+        # V4 guarda más casas que los proyectos anteriores (Pinnacle): se comparan las que ellos tenían.
+        old_books = o["book_odds"] or {}
+        shared = {book: odd for book, odd in (n["book_odds"] or {}).items() if book in old_books}
+        if old_books != shared:
+            result.problems.append(f"pierna {key}: book_odds {old_books!r} vs {shared!r}")
         for name in ("p_model", "p_market"):
             d = _diff(o[name], n[name])
             if d is None:

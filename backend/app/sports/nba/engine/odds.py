@@ -8,9 +8,8 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from app.config import SHARP_BOOKMAKER
 from app.sports.nba.engine.legs import LegSpec
-
-SHARP_BOOKMAKER = "Pinnacle"
 
 # Mercados de partido completo por bet_id (estables en la API).
 TEAM_BETS = {2: "ml", 3: "spread", 4: "total", 28: "team_total_home", 29: "team_total_away"}

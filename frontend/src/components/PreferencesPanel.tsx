@@ -20,6 +20,7 @@ export function PreferencesPanel({
   bookmaker,
   bookmakers,
   systemBook,
+  sharpBook,
   leagues,
 }: {
   config: SportConfig;
@@ -32,6 +33,8 @@ export function PreferencesPanel({
   bookmakers: string[];
   /** Casa con la que el sistema registra y mide sus parlays. */
   systemBook: string;
+  /** Casa de referencia del mercado (casi sin comisión). */
+  sharpBook: string;
   /** Fútbol: competiciones para elegir; vacío = sin filtro de ligas. */
   leagues: League[];
 }) {
@@ -188,6 +191,7 @@ export function PreferencesPanel({
                     <option key={b} value={b}>
                       {b}
                       {b === systemBook ? " (con la que se mide el sistema)" : ""}
+                      {b.toLowerCase() === sharpBook.toLowerCase() ? " (referencia del mercado, casi sin comisión)" : ""}
                     </option>
                   ))}
                 </select>

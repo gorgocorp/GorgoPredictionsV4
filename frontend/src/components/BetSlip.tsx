@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { oddFor } from "../lib/books";
-import { american, money, pct, signedPct } from "../lib/format";
+import { american, money, orList, pct, signedPct } from "../lib/format";
 import { impliedProbability, parseOdds, verdict, type Verdict } from "../lib/oddsInput";
 import { summarize } from "../lib/parlay";
 import { commonPreferences, useCommonPreferences } from "../lib/preferences";
@@ -27,7 +27,7 @@ function decimalLabel(d: number): string {
 }
 
 /** Casas para elegir en el boleto; "Otra…" deja escribir cualquier nombre. */
-const BOOKS = ["Caliente", "1xBet", "Bet365", "Codere", "Betano", "Playdoit", "Strendus"];
+const BOOKS = ["Caliente", "1xBet", "Bet365", "Pinnacle", "Codere", "Betano", "Playdoit", "Strendus"];
 const OTHER = "__otra__";
 
 function SlipBody({ bookmaker, apiBooks, onClose }: { bookmaker: string; apiBooks: string[]; onClose?: () => void }) {
@@ -45,10 +45,10 @@ function SlipBody({ bookmaker, apiBooks, onClose }: { bookmaker: string; apiBook
   // "Otra…": se muestra un campo de texto (también si la casa guardada no está en la lista).
   const [customBook, setCustomBook] = useState(!knownBook);
   const isApiBook = (b: string) => apiBooks.some((a) => a.toLowerCase() === b.toLowerCase());
-  const autoBooks = apiBooks.join(" o ");
+  const autoBooks = orList(apiBooks);
 
   // Momio de la casa del usuario por pierna: el que escribió para esa casa o, si su casa está en la API
-  // (Bet365, 1xBet), el de la API. Cada casa conserva sus propios momios escritos.
+  // (Bet365, 1xBet, Pinnacle), el de la API. Cada casa conserva sus propios momios escritos.
   const sameAsApi = key === bookmaker.toLowerCase();
   const legs = state.legs.map((l) => {
     const apiOdd = oddFor(l.bookOdds, myBook) ?? (sameAsApi && !l.bookOdds ? l.odd : null);

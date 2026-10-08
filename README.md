@@ -123,6 +123,10 @@ Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían 
 
 ## Momios de publicación, cierre y CLV
 
+- **Casas que se guardan en cada pierna** (`PRICE_BOOKMAKERS`): Bet365 (`BOOKMAKER`: con ella el sistema registra
+  y mide sus parlays), 1xBet y Pinnacle (la referencia del mercado: casi sin comisión). En Personalizar eliges con
+  cuál comparar piernas y parlays; en el boleto, si apuestas en una de ellas sus momios se llenan solos (Caliente y
+  las demás se escriben a mano). `parity` compara sólo las casas que guardaban los proyectos anteriores.
 - **Cuándo se leen los momios** (scheduler): en el ciclo regular (`SYNC_INTERVAL_HOURS`), en la previa de cada
   horario de partidos (`NBA_PREGAME_LEAD_MINUTES`=60: sincronización completa; `FUTBOL_PREGAME_LEAD_MINUTES`=45:
   alineaciones, bajas y momios) y en la **lectura de cierre** (`NBA_CLOSING_LEAD_MINUTES`=15: sólo momios y reporte
