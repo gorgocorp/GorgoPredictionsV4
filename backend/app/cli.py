@@ -7,6 +7,7 @@ Los comandos de datos aceptan --sport nba|futbol; sin él corren para todos los 
 """
 
 import argparse
+import getpass
 import importlib
 import logging
 import sys
@@ -98,6 +99,93 @@ def cmd_import_legacy(args) -> None:
         sys.exit(1)
     print(format_report(reports))
     print("Importación completa: todo cuadró con la foto de origen.")
+
+
+# ---------------------------------------------------------------- cuentas
+
+
+def _read_password() -> str:
+    """Pide la contraseña sin mostrarla; sin consola (p. ej. un pipe), la lee de la entrada estándar."""
+    if not sys.stdin.isatty():
+        return sys.stdin.readline().rstrip("\r\n")
+    first = getpass.getpass("Contraseña: ")
+    if getpass.getpass("Repítela: ") != first:
+        raise SystemExit("Las contraseñas no coinciden; no se cambió nada.")
+    return first
+
+
+def _warn_weak(password: str) -> None:
+    from app.core.accounts import MIN_PASSWORD
+
+    if len(password) < MIN_PASSWORD:
+        print(
+            f"Aviso: la contraseña tiene {len(password)} caracteres (la interfaz pide al menos {MIN_PASSWORD}). "
+            "Cámbiala antes de publicar el sitio en internet.",
+            file=sys.stderr,
+        )
+
+
+def _account(conn, username: str) -> dict:
+    from app.core.accounts import find_user
+
+    user = find_user(conn, username)
+    if user is None:
+        raise SystemExit(f"No existe el usuario {username}.")
+    return user
+
+
+def cmd_users(_args) -> None:
+    from app.core.accounts import list_users
+
+    with connect() as conn:
+        rows = list_users(conn, datetime.now(LOCAL_TZ))
+    for u in rows:
+        until = f" hasta {u['subscription_until']}" if u["subscription_until"] else ""
+        state = "" if u["active"] else " (desactivada)"
+        password = "" if u["has_password"] else " (sin contraseña)"
+        access = "todo" if u["full"] else "free"
+        print(f"  {u['username']:<24}{u['role'] + until:<28}ve: {access:<6}{u['bets']:>4} apuestas{state}{password}")
+
+
+def cmd_create_user(args) -> None:
+    from app.core.accounts import AccountError, create_user
+
+    until = date.fromisoformat(args.until) if args.until else None
+    password = _read_password()
+    with connect() as conn:
+        try:
+            create_user(conn, args.username, password, args.role, until, min_length=1)
+        except AccountError as exc:
+            raise SystemExit(str(exc)) from exc
+    _warn_weak(password)
+    print(f"Cuenta {args.username} creada ({args.role}).")
+
+
+def cmd_set_password(args) -> None:
+    from app.core.accounts import AccountError, set_password
+
+    password = _read_password()
+    with connect() as conn:
+        user = _account(conn, args.username)
+        try:
+            set_password(conn, user["id"], password, min_length=1)
+        except AccountError as exc:
+            raise SystemExit(str(exc)) from exc
+    _warn_weak(password)
+    print(f"Contraseña de {user['username']} actualizada; sus sesiones abiertas se cerraron.")
+
+
+def cmd_set_plan(args) -> None:
+    from app.core.accounts import AccountError, update_user
+
+    until = date.fromisoformat(args.until) if args.until else None
+    with connect() as conn:
+        user = _account(conn, args.username)
+        try:
+            update_user(conn, user["id"], role=args.role, until=until, active=not args.disable)
+        except AccountError as exc:
+            raise SystemExit(str(exc)) from exc
+    print(f"{user['username']}: {args.role}{f' hasta {until}' if until else ''}{' (desactivada)' if args.disable else ''}.")
 
 
 # ---------------------------------------------------------------- ingesta
@@ -239,6 +327,23 @@ def main() -> None:
     p = sub.add_parser("import-legacy", help="Importa el historial de los proyectos anteriores (sólo los lee)")
     p.add_argument("--replace", action="store_true", help="Borra lo que ya tenga V4 y vuelve a importar")
     p.set_defaults(func=cmd_import_legacy)
+
+    roles = ("admin", "subscriber", "free")
+    sub.add_parser("users", help="Cuentas, su plan y cuántas apuestas tienen").set_defaults(func=cmd_users)
+    p = sub.add_parser("create-user", help="Crea una cuenta (pide la contraseña)")
+    p.add_argument("username")
+    p.add_argument("--role", choices=roles, default="free")
+    p.add_argument("--until", help="Suscripción: último día con acceso, YYYY-MM-DD (por defecto, sin vencimiento)")
+    p.set_defaults(func=cmd_create_user)
+    p = sub.add_parser("set-password", help="Pone la contraseña de una cuenta (la pide) y cierra sus sesiones")
+    p.add_argument("username")
+    p.set_defaults(func=cmd_set_password)
+    p = sub.add_parser("set-plan", help="Cambia el rol o la suscripción de una cuenta")
+    p.add_argument("username")
+    p.add_argument("role", choices=roles)
+    p.add_argument("--until", help="Suscripción: último día con acceso, YYYY-MM-DD (por defecto, sin vencimiento)")
+    p.add_argument("--disable", action="store_true", help="Desactiva la cuenta (no puede entrar; conserva sus apuestas)")
+    p.set_defaults(func=cmd_set_plan)
 
     with_sport(sub.add_parser("status", help="Plan y consumo de cada API (no gasta cuota)")).set_defaults(func=cmd_status)
     with_sport(sub.add_parser("sync", help="Temporada en curso: partidos, estadísticas, bajas y momios")).set_defaults(func=cmd_sync)

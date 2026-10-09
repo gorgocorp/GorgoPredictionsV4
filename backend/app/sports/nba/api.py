@@ -2,18 +2,26 @@
 
 Los días son en hora local (LOCAL_TIMEZONE); con los horarios NBA coinciden con la fecha en hora del Este
 de nba.games.game_date, con la que se guardan el reporte de lesiones y las correcciones manuales.
+
+Todas piden sesión (se montan con esa dependencia en app/api/main.py); recalcular y marcar bajas, además, admin.
+Lo que ve una cuenta free: app/core/access.py.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 import psycopg
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.auth import admin_viewer, current_viewer
 from app.api.parlays import group_parlays
 from app.api.refresh import refresh_days
+from app.config import LOCAL_TZ
+from app.core.access import gate_projection, visible_legs, visible_parlays
+from app.core.accounts import Viewer
 from app.db import connect
+from app.sports.nba.matches import SCHEDULED
 from app.sports.nba.sport import SPORT
 
 router = APIRouter(prefix="/api/nba", tags=["NBA"])
@@ -138,7 +146,8 @@ def _team(row: dict, side: str) -> dict:
 
 
 @router.get("/days/{day}")
-def day_view(day: date) -> dict:
+def day_view(day: date, viewer: Viewer = Depends(current_viewer)) -> dict:
+    now = datetime.now(LOCAL_TZ)
     with connect() as conn:
         games = conn.execute(GAMES_SQL, (day,)).fetchall()
         parlay_rows = conn.execute(PARLAYS_SQL, (day,)).fetchall()
@@ -151,7 +160,7 @@ def day_view(day: date) -> dict:
         "sport": "nba",
         "date": day.isoformat(),
         "games": [
-            {
+            gate_projection({
                 "id": g["id"],
                 "match_id": g["match_id"],
                 "starts_at": g["starts_at"],
@@ -198,20 +207,20 @@ def day_view(day: date) -> dict:
                     "covered": g["home_team_id"] in submitted or g["away_team_id"] in submitted,
                 },
                 "picks_count": g["picks_count"],
-            }
+            }, viewer.full, now, SCHEDULED)
             for g in games
         ],
-        "parlays": group_parlays(parlay_rows, "game_id"),
+        "parlays": visible_parlays(group_parlays(parlay_rows, "game_id"), viewer.full),
     }
 
 
 @router.get("/days/{day}/legs")
-def day_legs(day: date) -> list[dict]:
+def day_legs(day: date, viewer: Viewer = Depends(current_viewer)) -> list[dict]:
     with connect() as conn:
-        return conn.execute(LEGS_SQL, (day,)).fetchall()
+        return visible_legs(conn, conn.execute(LEGS_SQL, (day,)).fetchall(), viewer.full, datetime.now(LOCAL_TZ))
 
 
-@router.post("/days/{day}/refresh")
+@router.post("/days/{day}/refresh", dependencies=[Depends(admin_viewer)])
 def refresh_day(day: date) -> dict:
     """Recalcula y guarda los picks del día (sólo partidos que aún no empiezan)."""
     return refresh_days(SPORT, [day])
@@ -282,7 +291,7 @@ class AvailabilityChange(BaseModel):
     status: Literal["out", "available"] | None
 
 
-@router.put("/availability")
+@router.put("/availability", dependencies=[Depends(admin_viewer)])
 def set_availability(change: AvailabilityChange) -> dict:
     """Guarda una corrección manual y recalcula los picks del día (partidos sin empezar)."""
     with connect() as conn:

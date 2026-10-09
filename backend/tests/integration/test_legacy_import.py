@@ -123,7 +123,10 @@ def test_imports_both_projects_without_id_collisions(v4):
     pick = rows(v4, "SELECT first_evaluated_at, book_odds FROM core.picks WHERE id = 1")[0]
     assert pick["first_evaluated_at"].isoformat() == "2026-10-20T10:00:00+00:00"
     assert pick["book_odds"] == {"Bet365": 1.8, "1xBet": 1.84}
-    # Cada apuesta apunta a sus picks renumerados.
+    # Las apuestas importadas son del dueño, y cada una apunta a sus picks renumerados.
+    assert rows(v4, "SELECT DISTINCT u.username FROM core.user_bets b JOIN core.users u ON u.id = b.user_id") == [
+        {"username": "GorgoAdmin"}
+    ]
     assert rows(v4, "SELECT bet_id, pick_id, odd::float AS odd FROM core.user_bet_legs ORDER BY bet_id, position") == [
         {"bet_id": 1, "pick_id": 1, "odd": 1.75},
         {"bet_id": 1, "pick_id": 2, "odd": 1.77},
@@ -142,6 +145,9 @@ def test_imports_both_projects_without_id_collisions(v4):
 
 
 def test_refuses_to_overwrite_without_replace_and_reimports_with_it(v4, legacy):
+    # Las cuentas no son datos importados: con una cuenta y su sesión, la base sigue "vacía" para importar,
+    # y --replace no las borra.
+    v4.execute("INSERT INTO core.users (username, role) VALUES ('cliente', 'free')")
     run_import(v4)
     with pytest.raises(LegacyImportError, match="--replace"):
         run_import(v4)
@@ -157,6 +163,7 @@ def test_refuses_to_overwrite_without_replace_and_reimports_with_it(v4, legacy):
         run_import(v4, replace=True)
         assert v4.execute("SELECT count(*) AS n FROM core.picks").fetchone()["n"] == 5
         assert v4.execute("SELECT count(*) AS n FROM core.matches").fetchone()["n"] == 2
+        assert [r["username"] for r in rows(v4, "SELECT username FROM core.users ORDER BY id")] == ["GorgoAdmin", "cliente"]
     finally:
         with psycopg.connect(legacy["nba"], autocommit=True) as conn:
             conn.execute("DELETE FROM picks WHERE market = 'total'")

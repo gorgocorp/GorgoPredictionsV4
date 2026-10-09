@@ -5,6 +5,7 @@ import { useToast } from "../../components/Toast";
 import { ApiError } from "../../lib/api";
 import { localTime } from "../../lib/format";
 import { invalidateSport } from "../../lib/queries";
+import { isAdmin, useViewer } from "../../lib/session";
 import { futbolApi, type Game, type RosterPlayer } from "./api";
 import { AVAILABILITY_LABELS, POSITION_LABELS } from "./config";
 
@@ -103,6 +104,7 @@ function PlayerRow({
 export function AvailabilityPanel({ game, onClose }: { game: Game | null; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocus = useRef<Element | null>(null);
+  const viewer = useViewer();
   const roster = useQuery({
     queryKey: ["futbol", "roster", game?.id],
     queryFn: () => futbolApi.roster(game!.id),
@@ -123,6 +125,7 @@ export function AvailabilityPanel({ game, onClose }: { game: Game | null; onClos
 
   if (!game) return null;
   const started = game.status !== "NS";
+  const admin = isAdmin(viewer);
 
   return (
     <>
@@ -150,6 +153,11 @@ export function AvailabilityPanel({ game, onClose }: { game: Game | null; onClos
               {roster.data?.lineups && " Ya hay alineaciones confirmadas: mandan sobre esta lista."}
             </span>
           </div>
+          {!admin && (
+            <p className="muted small" style={{ margin: 0 }}>
+              Sólo el administrador marca bajas a mano; aquí ves el estado de cada jugador.
+            </p>
+          )}
           {started && (
             <p className="muted small" style={{ margin: 0 }}>
               El partido ya empezó: los cambios ya no afectan sus picks (quedaron congelados).
@@ -176,7 +184,7 @@ export function AvailabilityPanel({ game, onClose }: { game: Game | null; onClos
                   ) : (
                     <ul className="avail-list">
                       {players.map((p) => (
-                        <PlayerRow key={p.player_id} player={p} fixtureId={game.id} disabled={started} lineups={roster.data.lineups} />
+                        <PlayerRow key={p.player_id} player={p} fixtureId={game.id} disabled={started || !admin} lineups={roster.data.lineups} />
                       ))}
                     </ul>
                   )}

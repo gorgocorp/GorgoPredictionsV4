@@ -328,8 +328,13 @@ def _check_source(src: psycopg.Connection, dst: psycopg.Connection, source: Sour
             )
 
 
+# Tablas de V4 que no son datos importados: nba.seasons trae sus filas de referencia desde la migración, y las
+# cuentas y sus sesiones no vienen de los proyectos anteriores (--replace no las borra).
+NOT_IMPORTED = {("nba", "seasons"), ("core", "users"), ("core", "sessions")}
+
+
 def _data_tables(dst: psycopg.Connection) -> list[tuple[str, str]]:
-    """Tablas de datos de V4 (sin nba.seasons, que trae sus filas de referencia desde la migración)."""
+    """Tablas de datos de V4 (las que llena la importación)."""
     return [
         (r["table_schema"], r["table_name"])
         for r in dst.execute(
@@ -339,7 +344,7 @@ def _data_tables(dst: psycopg.Connection) -> list[tuple[str, str]]:
             ORDER BY table_schema, table_name
             """
         )
-        if (r["table_schema"], r["table_name"]) != ("nba", "seasons")
+        if (r["table_schema"], r["table_name"]) not in NOT_IMPORTED
     ]
 
 
@@ -507,7 +512,7 @@ def _import_sport(src: psycopg.Connection, dst: psycopg.Connection, source: Sour
             None, _count(dst, sql.Identifier("stage_parlay_legs")), "parlay_legs",
         )
 
-        # Tus apuestas y sus piernas.
+        # Tus apuestas y sus piernas: en V4 son del dueño (el primer administrador).
         _stage(dst, "stage_bets")
         _copy(
             scur, dcur,
@@ -518,8 +523,9 @@ def _import_sport(src: psycopg.Connection, dst: psycopg.Connection, source: Sour
         _insert(
             dst,
             sql.SQL(
-                "INSERT INTO core.user_bets (id, {cols}) OVERRIDING SYSTEM VALUE "
-                "SELECT id, {cols} FROM stage_bets ORDER BY legacy_id"
+                "INSERT INTO core.user_bets (id, user_id, {cols}) OVERRIDING SYSTEM VALUE "
+                "SELECT id, (SELECT id FROM core.users WHERE role = 'admin' ORDER BY id LIMIT 1), {cols} "
+                "FROM stage_bets ORDER BY legacy_id"
             ).format(cols=_names(BET_COLUMNS)),
             None, _count(dst, sql.Identifier("stage_bets")), "user_bets",
         )

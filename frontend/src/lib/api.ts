@@ -3,6 +3,50 @@
 export type SportKey = "nba" | "futbol";
 export type Result = "won" | "lost" | "void" | null;
 
+/** admin: ve todo y administra; subscriber: ve todo mientras su suscripción esté vigente; free: los parlays gratis. */
+export type Role = "admin" | "subscriber" | "free";
+
+/** Quién inició sesión (/api/auth/me y /api/auth/login). */
+export interface Viewer {
+  id: number;
+  username: string;
+  role: Role;
+  /** Plan efectivo: un suscriptor vencido está en "free". */
+  plan: Role;
+  /** Ve todo: admin o suscripción vigente. */
+  full: boolean;
+  /** Último día con suscripción (YYYY-MM-DD, hora local); null = sin vencimiento. */
+  subscription_until: string | null;
+}
+
+/** Una cuenta en la administración (/api/admin/users). */
+export interface AdminUser {
+  id: number;
+  username: string;
+  role: Role;
+  subscription_until: string | null;
+  active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+  has_password: boolean;
+  bets: number;
+  /** Ve todo hoy (activa y con plan completo vigente). */
+  full: boolean;
+}
+
+export interface UserChange {
+  role: Role;
+  subscription_until: string | null;
+  active: boolean;
+}
+
+export interface NewUser {
+  username: string;
+  password: string;
+  role: Role;
+  subscription_until: string | null;
+}
+
 export interface Team {
   id: number;
   name: string;
@@ -63,6 +107,28 @@ export interface Leg {
   player_status: string | null;
   /** Momio de cada casa de la API que cotiza la pierna, p. ej. {"Bet365": 1.83, "1xBet": 1.87}. */
   book_odds: Record<string, number> | null;
+}
+
+/** Parlay registrado por el sistema para un día (configuración estándar). A una cuenta free sólo le llegan los gratis. */
+export interface SystemParlay {
+  id: number;
+  mode: "prob" | "ev";
+  n_legs: number;
+  probability: number;
+  odd: number | null;
+  ev: number | null;
+  result: Result;
+  settled_odd: number | null;
+  evaluated_at: string;
+  legs: {
+    pick_id: number;
+    match_id: number;
+    market: string;
+    description: string;
+    p_model: number;
+    odd: number | null;
+    result: Result;
+  }[];
 }
 
 export interface CalendarDay {
@@ -188,6 +254,7 @@ export interface PerformanceFilters {
 }
 
 export interface HistoryLeg {
+  locked: false;
   pick_id: number;
   position: number;
   sport: SportKey;
@@ -202,6 +269,16 @@ export interface HistoryLeg {
   odd: number | null;
   result: Result;
   outcome: { value: number | null; text: string };
+}
+
+/** Pierna que una cuenta free no ve (partido sin empezar fuera de los parlays gratis): sólo el partido. */
+export interface LockedLeg {
+  locked: true;
+  position: number;
+  sport: SportKey;
+  competition: string;
+  matchup: string;
+  starts_at: string;
 }
 
 export interface HistoryParlay {
@@ -223,7 +300,9 @@ export interface HistoryParlay {
   model_version: string;
   profit: number | null;
   recorded_before_start: boolean;
-  legs: HistoryLeg[];
+  /** Alguna pierna llega bloqueada (cuenta free). */
+  locked: boolean;
+  legs: (HistoryLeg | LockedLeg)[];
 }
 
 export interface HistorySummary {
@@ -331,6 +410,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Evento de `window` cuando la API responde 401 (la sesión venció o se cerró): la app vuelve a "Entrar". */
+export const SESSION_EXPIRED = "gorgo:session-expired";
+
 export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -338,6 +420,7 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError(0, "No se pudo conectar con el servidor. Revisa que el contenedor web esté corriendo.");
   }
+  if (res.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event(SESSION_EXPIRED));
   if (!res.ok) {
     let detail = `Error ${res.status}`;
     try {
@@ -351,7 +434,28 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Petición con cuerpo JSON. */
+function send<T>(url: string, method: "POST" | "PUT", body?: unknown): Promise<T> {
+  return request<T>(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 export const api = {
+  auth: {
+    me: () => request<Viewer>("/api/auth/me"),
+    login: (username: string, password: string) => send<Viewer>("/api/auth/login", "POST", { username, password }),
+    logout: () => send<{ ok: true }>("/api/auth/logout", "POST"),
+    changePassword: (current: string, next: string) => send<{ ok: true }>("/api/auth/password", "POST", { current, new: next }),
+  },
+  admin: {
+    users: () => request<AdminUser[]>("/api/admin/users"),
+    createUser: (user: NewUser) => send<{ id: number }>("/api/admin/users", "POST", user),
+    updateUser: (id: number, change: UserChange) => send<{ id: number }>(`/api/admin/users/${id}`, "PUT", change),
+    resetPassword: (id: number, password: string) => send<{ id: number }>(`/api/admin/users/${id}/password`, "PUT", { password }),
+  },
   meta: () => request<Meta>("/api/meta"),
   history: (f: HistoryFilters) => request<HistoryResponse>(`/api/history?${toQuery(f)}`),
   bets: () => request<{ summary: BetsSummary; items: Bet[] }>("/api/bets"),

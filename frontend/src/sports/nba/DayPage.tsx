@@ -7,6 +7,7 @@ import { useToast } from "../../components/Toast";
 import { api, ApiError } from "../../lib/api";
 import { longDate, relativeTime } from "../../lib/format";
 import { invalidateSport } from "../../lib/queries";
+import { isAdmin, useViewer } from "../../lib/session";
 import { AvailabilityPanel } from "./AvailabilityPanel";
 import { nbaApi } from "./api";
 import { NBA, PHASE_LABELS } from "./config";
@@ -16,6 +17,7 @@ export function DayPage() {
   const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const notify = useToast();
+  const admin = isAdmin(useViewer());
   const meta = useQuery({ queryKey: ["meta"], queryFn: api.meta, refetchInterval: 60_000 });
   const today = meta.data?.today;
   const date = params.get("fecha") ?? today;
@@ -54,7 +56,7 @@ export function DayPage() {
   const nextGameDay = calendar?.find((d) => d.date > date)?.date;
   const setDate = (d: string) => setParams(d === today ? {} : { fecha: d });
 
-  const refreshButton = (
+  const refreshButton = admin && (
     <button
       type="button"
       className="btn btn-primary"
@@ -106,11 +108,12 @@ export function DayPage() {
       header={header}
       games={{ ...day, data: day.data?.games }}
       legs={legs}
+      parlays={day.data?.parlays}
       multiDay={false}
       slipDate={date}
       gamesNote="Horas en tu zona horaria · puntos proyectados por el modelo"
       refreshButton={refreshButton}
-      noPicksMessage="El sistema los calcula cada 6 horas para hoy y mañana, y otra vez antes de cada horario de partidos. Puedes calcularlos ahora."
+      noPicksMessage={`El sistema los calcula cada 6 horas para hoy y mañana, y otra vez antes de cada horario de partidos.${admin ? " Puedes calcularlos ahora." : ""}`}
       emptyGames={
         <EmptyState
           title="No hay partidos de la NBA este día"

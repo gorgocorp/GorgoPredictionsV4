@@ -6,6 +6,7 @@ import { useToast } from "../../components/Toast";
 import { api, ApiError } from "../../lib/api";
 import { longDate, shiftDate, shortDay, weekendRange } from "../../lib/format";
 import { invalidateSport } from "../../lib/queries";
+import { isAdmin, useViewer } from "../../lib/session";
 import { AvailabilityPanel } from "./AvailabilityPanel";
 import { futbolApi, type SlateFilter } from "./api";
 import { FUTBOL, roundLabel } from "./config";
@@ -23,6 +24,7 @@ export function RoundPage() {
   const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const notify = useToast();
+  const admin = isAdmin(useViewer());
   const meta = useQuery({ queryKey: ["meta"], queryFn: api.meta, refetchInterval: 60_000 });
   const today = meta.data?.today;
   const mode: Mode = params.get("modo") === "fechas" ? "fechas" : "jornada";
@@ -99,7 +101,7 @@ export function RoundPage() {
   const span = slate.data ? `${shortDay(slate.data.desde)} a ${shortDay(slate.data.hasta)}` : "";
   const days = new Set(gameList.map((g) => g.match_date)).size;
 
-  const refreshButton = (
+  const refreshButton = admin && (
     <button
       type="button"
       className="btn btn-primary"
@@ -214,7 +216,7 @@ export function RoundPage() {
       gamesNote="Goles esperados por el modelo · todo a 90 minutos"
       refreshButton={refreshButton}
       wholeLabel={mode === "jornada" ? "Jornada completa" : "Todos los partidos"}
-      noPicksMessage="El sistema calcula los picks de los próximos 7 días en cada sincronización (cada 6 horas). Para partidos más lejanos o para tenerlos ya, recalcula."
+      noPicksMessage={`El sistema calcula los picks de los próximos 7 días en cada sincronización (cada 6 horas).${admin ? " Para partidos más lejanos o para tenerlos ya, recalcula." : ""}`}
       emptyGames={
         <EmptyState title={mode === "jornada" ? "Esta jornada no tiene partidos" : "No hay partidos de tus ligas en esas fechas"}>
           {mode === "fechas" ? "Prueba con otro rango (hasta 14 días)." : "Elige otra jornada."}

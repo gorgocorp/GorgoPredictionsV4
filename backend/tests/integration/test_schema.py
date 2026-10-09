@@ -6,7 +6,7 @@ from psycopg import sql
 
 from app.sports.futbol.matches import sync_matches as sync_futbol
 from app.sports.nba.matches import sync_matches as sync_nba
-from tests.integration.helpers import STARTS, add_futbol_fixture, add_nba_game, add_pick, match_id
+from tests.integration.helpers import STARTS, add_futbol_fixture, add_nba_game, add_pick, match_id, owner_id
 
 
 def test_same_provider_ids_in_both_sports_are_different_matches(db):
@@ -136,10 +136,10 @@ def test_one_bet_can_mix_nba_and_futbol_legs(db):
     futbol_pick = add_pick(db, "futbol", match_id(db, "futbol", 7000), "btts", "yes")
     bet = db.execute(
         """
-        INSERT INTO core.user_bets (bookmaker, stake, odd, model_probability, created_at, first_start)
-        VALUES ('Caliente', 100, 3.2, 0.36, now(), %s) RETURNING id
+        INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, created_at, first_start)
+        VALUES (%s, 'Caliente', 100, 3.2, 0.36, now(), %s) RETURNING id
         """,
-        (STARTS,),
+        (owner_id(db), STARTS),
     ).fetchone()["id"]
     for position, pick in enumerate((nba_pick, futbol_pick), 1):
         db.execute(
@@ -158,10 +158,10 @@ def test_bet_must_be_registered_before_first_start(db):
         with db.transaction():
             db.execute(
                 """
-                INSERT INTO core.user_bets (bookmaker, stake, odd, model_probability, created_at, first_start)
-                VALUES ('Caliente', 100, 2.0, 0.5, '2026-10-21T23:31:00+00:00', %s)
+                INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, created_at, first_start)
+                VALUES (%s, 'Caliente', 100, 2.0, 0.5, '2026-10-21T23:31:00+00:00', %s)
                 """,
-                (STARTS,),
+                (owner_id(db), STARTS),
             )
 
 
@@ -175,3 +175,39 @@ def test_parlay_slots_are_per_sport(db):
     with pytest.raises(psycopg.errors.UniqueViolation):
         with db.transaction():
             db.execute(insert, ("nba",))
+
+
+def test_accounts_constraints(db):
+    db.execute("INSERT INTO core.users (username) VALUES ('cliente')")
+    for bad in (
+        "INSERT INTO core.users (username) VALUES ('CLIENTE')",  # mismo usuario sin importar mayúsculas
+        "INSERT INTO core.users (username) VALUES ('con espacio')",
+        "INSERT INTO core.users (username, role) VALUES ('otro', 'vip')",
+        "INSERT INTO core.users (username, subscription_until) VALUES ('otro', '2026-11-08')",  # free con vencimiento
+        "INSERT INTO core.users (username, password_hash) VALUES ('otro', 'bolas')",  # nunca en claro
+    ):
+        with pytest.raises((psycopg.errors.UniqueViolation, psycopg.errors.CheckViolation)):
+            with db.transaction():
+                db.execute(bad)
+
+
+def test_every_bet_has_an_owner_that_cannot_be_deleted(db):
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        with db.transaction():
+            db.execute(
+                """
+                INSERT INTO core.user_bets (bookmaker, stake, odd, model_probability, created_at, first_start)
+                VALUES ('Caliente', 100, 2.0, 0.5, now(), %s)
+                """,
+                (STARTS,),
+            )
+    db.execute(
+        """
+        INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, created_at, first_start)
+        VALUES (%s, 'Caliente', 100, 2.0, 0.5, now(), %s)
+        """,
+        (owner_id(db), STARTS),
+    )
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        with db.transaction():
+            db.execute("DELETE FROM core.users WHERE username = 'GorgoAdmin'")

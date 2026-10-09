@@ -1,17 +1,25 @@
 """Rutas de fútbol para la interfaz (montadas en /api/futbol): día, jornada o rango de fechas, piernas,
 recalcular, plantel y bajas. Los días son en hora local (LOCAL_TIMEZONE), igual que futbol.fixtures.match_date.
+
+Todas piden sesión (se montan con esa dependencia en app/api/main.py); recalcular y marcar bajas, además, admin.
+Lo que ve una cuenta free: app/core/access.py.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 import psycopg
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.auth import admin_viewer, current_viewer
 from app.api.parlays import group_parlays
 from app.api.refresh import refresh_days
+from app.config import LOCAL_TZ
+from app.core.access import gate_projection, visible_legs, visible_parlays
+from app.core.accounts import Viewer
 from app.db import connect
+from app.sports.futbol.matches import SCHEDULED
 from app.sports.futbol.sport import SPORT
 
 router = APIRouter(prefix="/api/futbol", tags=["Fútbol"])
@@ -137,8 +145,9 @@ def _team(row: dict, side: str) -> dict:
     return {"id": row[f"{side}_team_id"], "name": row[f"{side}_name"], "logo": row[f"{side}_logo"]}
 
 
-def _games(conn: psycopg.Connection, filt: dict) -> list[dict]:
-    """Partidos con proyección, bajas y conteo de piernas para un filtro de SLATE_FILTER."""
+def _games(conn: psycopg.Connection, filt: dict, viewer: Viewer) -> list[dict]:
+    """Partidos con proyección (si la cuenta la ve), bajas y conteo de piernas para un filtro de SLATE_FILTER."""
+    now = datetime.now(LOCAL_TZ)
     games = conn.execute(GAMES_SQL, filt).fetchall()
     absences = conn.execute(ABSENCES_SQL, filt).fetchall()
 
@@ -165,7 +174,7 @@ def _games(conn: psycopg.Connection, filt: dict) -> list[dict]:
         }
 
     return [
-        {
+        gate_projection({
             "id": g["id"],
             "match_id": g["match_id"],
             "match_date": g["match_date"],
@@ -211,7 +220,7 @@ def _games(conn: psycopg.Connection, filt: dict) -> list[dict]:
                 for a in by_fixture.get(g["id"], [])
                 if a["team_id"] in (g["home_team_id"], g["away_team_id"])
             ],
-        }
+        }, viewer.full, now, SCHEDULED)
         for g in games
     ]
 
@@ -221,20 +230,21 @@ def _day_filter(day: date) -> dict:
 
 
 @router.get("/days/{day}")
-def day_view(day: date) -> dict:
+def day_view(day: date, viewer: Viewer = Depends(current_viewer)) -> dict:
     with connect() as conn:
-        games = _games(conn, _day_filter(day))
+        games = _games(conn, _day_filter(day), viewer)
         parlay_rows = conn.execute(PARLAYS_SQL, (day,)).fetchall()
-    return {"sport": "futbol", "date": day.isoformat(), "games": games, "parlays": group_parlays(parlay_rows, "fixture_id")}
+    parlays = visible_parlays(group_parlays(parlay_rows, "fixture_id"), viewer.full)
+    return {"sport": "futbol", "date": day.isoformat(), "games": games, "parlays": parlays}
 
 
 @router.get("/days/{day}/legs")
-def day_legs(day: date) -> list[dict]:
+def day_legs(day: date, viewer: Viewer = Depends(current_viewer)) -> list[dict]:
     with connect() as conn:
-        return conn.execute(LEGS_SQL, _day_filter(day)).fetchall()
+        return visible_legs(conn, conn.execute(LEGS_SQL, _day_filter(day)).fetchall(), viewer.full, datetime.now(LOCAL_TZ))
 
 
-@router.post("/days/{day}/refresh")
+@router.post("/days/{day}/refresh", dependencies=[Depends(admin_viewer)])
 def refresh_day(day: date) -> dict:
     """Recalcula y guarda los picks del día (sólo partidos que aún no empiezan)."""
     return refresh_days(SPORT, [day])
@@ -303,21 +313,34 @@ def rounds(league: int) -> dict:
 
 
 @router.get("/slate")
-def slate(desde: date | None = None, hasta: date | None = None, league: int | None = None, jornada: str | None = None) -> dict:
+def slate(
+    desde: date | None = None,
+    hasta: date | None = None,
+    league: int | None = None,
+    jornada: str | None = None,
+    viewer: Viewer = Depends(current_viewer),
+) -> dict:
     """Partidos de varios días: un rango de fechas o una jornada completa de una liga."""
     with connect() as conn:
         filt = _slate_filter(conn, desde, hasta, league, jornada)
-        games = _games(conn, filt)
+        games = _games(conn, filt, viewer)
     return {"desde": filt["desde"], "hasta": filt["hasta"], "league": league, "jornada": jornada, "games": games}
 
 
 @router.get("/slate/legs")
-def slate_legs(desde: date | None = None, hasta: date | None = None, league: int | None = None, jornada: str | None = None) -> list[dict]:
+def slate_legs(
+    desde: date | None = None,
+    hasta: date | None = None,
+    league: int | None = None,
+    jornada: str | None = None,
+    viewer: Viewer = Depends(current_viewer),
+) -> list[dict]:
     with connect() as conn:
-        return conn.execute(LEGS_SQL, _slate_filter(conn, desde, hasta, league, jornada)).fetchall()
+        rows = conn.execute(LEGS_SQL, _slate_filter(conn, desde, hasta, league, jornada)).fetchall()
+        return visible_legs(conn, rows, viewer.full, datetime.now(LOCAL_TZ))
 
 
-@router.post("/slate/refresh")
+@router.post("/slate/refresh", dependencies=[Depends(admin_viewer)])
 def slate_refresh(desde: date | None = None, hasta: date | None = None, league: int | None = None, jornada: str | None = None) -> dict:
     """Recalcula los días de la jornada o del rango que tienen partidos por empezar."""
     with connect() as conn:
@@ -414,7 +437,7 @@ class AvailabilityChange(BaseModel):
     status: Literal["out", "available"] | None
 
 
-@router.put("/availability")
+@router.put("/availability", dependencies=[Depends(admin_viewer)])
 def set_availability(change: AvailabilityChange) -> dict:
     """Guarda una corrección manual y recalcula los picks del día (partidos sin empezar)."""
     with connect() as conn:

@@ -1,4 +1,4 @@
-import { request, type CalendarDay, type Leg, type RefreshResult, type Team } from "../../lib/api";
+import { request, type CalendarDay, type Leg, type SystemParlay, type RefreshResult, type Team } from "../../lib/api";
 
 /** Rutas de NBA (/api/nba): backend/app/sports/nba/api.py. */
 
@@ -41,6 +41,8 @@ export interface Game {
   away: Team;
   score: { home: number; away: number } | null;
   projection: Projection | null;
+  /** Hay proyección del modelo pero la cuenta no la ve (free, partido sin empezar). */
+  projection_locked: boolean;
   has_odds: boolean;
   picks_count: number;
   missing_points: { home: number; away: number };
@@ -73,6 +75,8 @@ export interface Roster {
 export interface DayView {
   date: string;
   games: Game[];
+  /** Parlays que registró el sistema ese día (a una cuenta free, sólo los gratis). */
+  parlays: SystemParlay[];
 }
 
 const BASE = "/api/nba";

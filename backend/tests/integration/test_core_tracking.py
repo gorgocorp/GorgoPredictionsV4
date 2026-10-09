@@ -110,8 +110,9 @@ def test_settles_both_sports_and_a_mixed_bet(db):
         (r["sport"], r["description"]): r["id"]
         for r in db.execute("SELECT sport, description, id FROM core.picks")
     }
+    owner = db.execute("SELECT id FROM core.users WHERE username = 'GorgoAdmin'").fetchone()["id"]
     bet = create_bet(
-        db, "Caliente", 100,
+        db, owner, "Caliente", 100,
         [LegInput(pick[("nba", "Gana local 1001")], 1.5), LegInput(pick[("futbol", "Gana local")], 1.7)],
         BEFORE,
     )
@@ -133,7 +134,7 @@ def test_settles_both_sports_and_a_mixed_bet(db):
         ("futbol", "Ambos anotan"): "won",
     }
 
-    bets = list_bets(db, AFTER, all_sports())
+    bets = list_bets(db, owner, AFTER, all_sports())
     item = next(b for b in bets["items"] if b["id"] == bet)
     assert (item["result"], item["payout"]) == ("won", 255.0)  # 100 × 1.5 × 1.7
     assert [(leg["sport"], leg["matchup"], leg["outcome"]["text"]) for leg in item["legs"]] == [

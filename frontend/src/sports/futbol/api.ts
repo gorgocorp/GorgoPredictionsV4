@@ -1,4 +1,4 @@
-import { request, toQuery, type CalendarDay, type League, type Leg, type RefreshResult, type Team } from "../../lib/api";
+import { request, toQuery, type CalendarDay, type League, type Leg, type SystemParlay, type RefreshResult, type Team } from "../../lib/api";
 
 /** Rutas de fútbol (/api/futbol): backend/app/sports/futbol/api.py. */
 
@@ -59,6 +59,8 @@ export interface Game {
   away: Team;
   score: Score | null;
   projection: Projection | null;
+  /** Hay proyección del modelo pero la cuenta no la ve (free, partido sin empezar). */
+  projection_locked: boolean;
   has_odds: boolean;
   has_lineups: boolean;
   picks_count: number;
@@ -94,6 +96,8 @@ export interface Roster {
 export interface DayView {
   date: string;
   games: Game[];
+  /** Parlays que registró el sistema ese día (a una cuenta free, sólo los gratis). */
+  parlays: SystemParlay[];
 }
 
 export interface Round {

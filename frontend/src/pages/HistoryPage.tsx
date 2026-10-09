@@ -1,8 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
+import { SUBSCRIBE_HINT } from "../components/Locked";
 import { EmptyState, ErrorState, ResultBadge, Skeleton } from "../components/States";
 import { api, toQuery, type HistoryFilters, type HistoryParlay, type HistorySummary } from "../lib/api";
 import { dateTime, localTime, longDate, odds, pct, signedPct } from "../lib/format";
+import { useViewer } from "../lib/session";
 import { asSport, SPORT_KEYS, SPORTS } from "../lib/sports";
 
 const PAGE_SIZE = 20;
@@ -149,28 +151,48 @@ function ParlayEvidence({ p }: { p: HistoryParlay }) {
       </p>
 
       <ol className="leg-list">
-        {p.legs.map((l) => (
-          <li key={l.pick_id} className="leg-item">
-            <span>
-              <span className="muted xs">
-                {l.competition} · {l.matchup} · {localTime(l.starts_at)}
+        {p.legs.map((l) =>
+          l.locked ? (
+            <li key={l.position} className="leg-item">
+              <span>
+                <span className="muted xs">
+                  {l.competition} · {l.matchup} · {localTime(l.starts_at)}
+                </span>
+                <br />
+                <span className="locked-text" aria-hidden="true">
+                  Pierna sugerida por el modelo
+                </span>
+                <span className="visually-hidden">Pierna disponible con suscripción</span>
               </span>
-              <br />
-              {l.description}
-              <br />
-              <span className="xs">
-                Real: <strong>{l.outcome.text}</strong>
+              <span className="leg-meta">
+                <span className="badge badge-neutral" title={SUBSCRIBE_HINT}>
+                  <span aria-hidden="true">🔒</span> Suscripción
+                </span>
               </span>
-            </span>
-            <span className="leg-meta">
-              <span className="num">{pct(l.p_model)}</span>
-              <br />
-              <span className="muted xs num">{l.odd ? odds(l.odd) : "sin momio"}</span>
-              <br />
-              <ResultBadge result={l.result} pendingLabel="Pendiente" />
-            </span>
-          </li>
-        ))}
+            </li>
+          ) : (
+            <li key={l.position} className="leg-item">
+              <span>
+                <span className="muted xs">
+                  {l.competition} · {l.matchup} · {localTime(l.starts_at)}
+                </span>
+                <br />
+                {l.description}
+                <br />
+                <span className="xs">
+                  Real: <strong>{l.outcome.text}</strong>
+                </span>
+              </span>
+              <span className="leg-meta">
+                <span className="num">{pct(l.p_model)}</span>
+                <br />
+                <span className="muted xs num">{l.odd ? odds(l.odd) : "sin momio"}</span>
+                <br />
+                <ResultBadge result={l.result} pendingLabel="Pendiente" />
+              </span>
+            </li>
+          ),
+        )}
       </ol>
     </article>
   );
@@ -178,6 +200,7 @@ function ParlayEvidence({ p }: { p: HistoryParlay }) {
 
 export function HistoryPage() {
   const [params, setParams] = useSearchParams();
+  const viewer = useViewer();
   const page = Math.max(1, Number(params.get("pagina") ?? 1));
   const sport = asSport(params.get("deporte"));
   const filters: HistoryFilters = {
@@ -223,9 +246,15 @@ export function HistoryPage() {
             Cada parlay que sugirió el sistema, registrado antes de los partidos y liquidado con el resultado real.
           </p>
         </div>
-        <a className="btn" href={`/api/history.csv?${toQuery(filters)}`} download>
-          Descargar CSV
-        </a>
+        {viewer.full ? (
+          <a className="btn" href={`/api/history.csv?${toQuery(filters)}`} download>
+            Descargar CSV
+          </a>
+        ) : (
+          <button type="button" className="btn" disabled title={`Disponible con suscripción. ${SUBSCRIBE_HINT}`}>
+            <span aria-hidden="true">🔒</span> Descargar CSV
+          </button>
+        )}
       </div>
 
       <div className="filters">

@@ -7,6 +7,7 @@ import { american, money, orList, pct, signedPct } from "../lib/format";
 import { impliedProbability, parseOdds, verdict, type Verdict } from "../lib/oddsInput";
 import { summarize } from "../lib/parlay";
 import { commonPreferences, useCommonPreferences } from "../lib/preferences";
+import { useViewer } from "../lib/session";
 import { bookKey, slip, useSlip } from "../lib/slip";
 import { SPORTS } from "../lib/sports";
 import { Spinner } from "./States";
@@ -32,6 +33,7 @@ const OTHER = "__otra__";
 
 function SlipBody({ bookmaker, apiBooks, onClose }: { bookmaker: string; apiBooks: string[]; onClose?: () => void }) {
   const state = useSlip();
+  const { full } = useViewer();
   const { myBook } = useCommonPreferences();
   const notify = useToast();
   const navigate = useNavigate();
@@ -164,7 +166,14 @@ function SlipBody({ bookmaker, apiBooks, onClose }: { bookmaker: string; apiBook
 
       {legs.length === 0 ? (
         <p className="muted small" style={{ margin: 0 }}>
-          Agrega piernas con el botón <strong>+</strong> de la tabla o carga un parlay sugerido; puedes mezclar NBA y fútbol. Luego
+          {full ? (
+            <>
+              Agrega piernas con el botón <strong>+</strong> de la tabla o carga un parlay sugerido; puedes mezclar NBA y fútbol.
+            </>
+          ) : (
+            <>Carga un parlay gratis; puedes mezclar NBA y fútbol.</>
+          )}{" "}
+          Luego
           escribe los momios que te da {myBook || "tu casa"} para compararlos con el modelo y registrar tu apuesta. Si apuestas en{" "}
           {autoBooks}, sus momios se llenan solos desde la API.
         </p>

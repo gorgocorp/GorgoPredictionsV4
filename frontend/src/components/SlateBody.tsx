@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, type League, type Leg, type SlateGame } from "../lib/api";
+import { api, type League, type Leg, type SlateGame, type SystemParlay } from "../lib/api";
 import { withPrices } from "../lib/books";
 import { longDate } from "../lib/format";
 import { usePreferences } from "../lib/preferences";
+import { useViewer } from "../lib/session";
 import type { SportConfig } from "../lib/sports";
 import { BetSlip } from "./BetSlip";
+import { FreePicks } from "./FreePicks";
 import { LegsTable } from "./LegsTable";
 import { ParlaysSection } from "./ParlaysSection";
 import { PreferencesPanel } from "./PreferencesPanel";
@@ -24,7 +26,8 @@ export interface QueryState<T> {
 export interface GameCardProps<G> {
   game: G;
   selected: boolean;
-  onSelect: () => void;
+  /** Filtra la tabla de piernas a este partido (sin tabla, p. ej. en el plan gratis, no hay botón). */
+  onSelect?: () => void;
   onAbsences: () => void;
 }
 
@@ -64,13 +67,14 @@ function leagueCounts(games: SlateGame[]): { league: League; count: number }[] {
 /**
  * Cuerpo común de las páginas Día (NBA y fútbol) y Jornada: partidos, parlays sugeridos, tabla de piernas,
  * boleto y paneles. Cada página pone su encabezado, de dónde salen partidos y piernas, y la tarjeta y el
- * panel de bajas de su deporte.
+ * panel de bajas de su deporte. Una cuenta free ve en su lugar los parlays gratis y el resto difuminado.
  */
 export function SlateBody<G extends SlateGame>({
   config,
   header,
   games: gamesQuery,
   legs: legsQuery,
+  parlays,
   multiDay,
   slipDate,
   gamesNote,
@@ -85,6 +89,8 @@ export function SlateBody<G extends SlateGame>({
   header: ReactNode;
   games: QueryState<G[]>;
   legs: QueryState<Leg[]>;
+  /** Parlays que registró el sistema (de un solo día): con ellos se muestran los gratis a una cuenta free. */
+  parlays?: SystemParlay[];
   multiDay: boolean;
   slipDate: string;
   /** Nota junto al título "Partidos" (qué proyecta el modelo). */
@@ -92,12 +98,14 @@ export function SlateBody<G extends SlateGame>({
   emptyGames: ReactNode;
   /** Mensaje cuando hay partidos por empezar pero todavía no hay picks. */
   noPicksMessage: string;
+  /** Sólo para el administrador (null para los demás). */
   refreshButton: ReactNode;
   wholeLabel?: string;
   GameCard: ComponentType<GameCardProps<G>>;
   AvailabilityPanel: ComponentType<{ game: G | null; onClose: () => void }>;
 }) {
   const [params, setParams] = useSearchParams();
+  const viewer = useViewer();
   const meta = useQuery({ queryKey: ["meta"], queryFn: api.meta, refetchInterval: 60_000 });
   const bookmaker = meta.data?.bookmaker ?? "Bet365";
   const bookmakers = meta.data?.bookmakers ?? [bookmaker];
@@ -123,6 +131,7 @@ export function SlateBody<G extends SlateGame>({
   const shownLegs = leagueFilter === null ? pricedLegs : pricedLegs.filter((l) => shownIds.has(l.match_id));
   const openGames = gameList.filter((g) => g.status === "NS" && new Date(g.starts_at).getTime() > Date.now());
   const hasPicks = gameList.some((g) => g.picks_count > 0);
+  const totalLegs = groups.reduce((n, group) => n + group.games.reduce((m, g) => m + g.picks_count, 0), 0);
 
   const update = (changes: Record<string, string | null>) =>
     setParams(
@@ -193,7 +202,7 @@ export function SlateBody<G extends SlateGame>({
                       key={g.id}
                       game={g}
                       selected={selectedGame === g.id}
-                      onSelect={() => selectGame(g.id)}
+                      onSelect={viewer.full ? () => selectGame(g.id) : undefined}
                       onAbsences={() => setAbsencesGameId(g.id)}
                     />
                   ))}
@@ -217,6 +226,16 @@ export function SlateBody<G extends SlateGame>({
             </>
           ) : legsQuery.isError ? (
             <ErrorState message={(legsQuery.error as Error).message} onRetry={() => legsQuery.refetch()} />
+          ) : !viewer.full ? (
+            <FreePicks
+              config={config}
+              parlays={parlays}
+              legs={legsQuery.data ?? []}
+              games={games}
+              bookmaker={bookmaker}
+              date={slipDate}
+              totalLegs={totalLegs}
+            />
           ) : (
             <>
               <ParlaysSection
@@ -241,17 +260,19 @@ export function SlateBody<G extends SlateGame>({
           ))}
       </div>
       <BetSlip bookmaker={bookmaker} apiBooks={bookmakers} />
-      <PreferencesPanel
-        config={config}
-        open={prefsOpen}
-        onClose={closePrefs}
-        legs={shownLegs}
-        bookmaker={priceBook}
-        bookmakers={bookmakers}
-        systemBook={bookmaker}
-        sharpBook={meta.data?.sharp_bookmaker ?? ""}
-        leagues={meta.data?.sports[config.key].leagues ?? []}
-      />
+      {viewer.full && (
+        <PreferencesPanel
+          config={config}
+          open={prefsOpen}
+          onClose={closePrefs}
+          legs={shownLegs}
+          bookmaker={priceBook}
+          bookmakers={bookmakers}
+          systemBook={bookmaker}
+          sharpBook={meta.data?.sharp_bookmaker ?? ""}
+          leagues={meta.data?.sports[config.key].leagues ?? []}
+        />
+      )}
       <AvailabilityPanel game={gameList.find((g) => g.id === absencesGameId) ?? null} onClose={closeAbsences} />
     </div>
   );

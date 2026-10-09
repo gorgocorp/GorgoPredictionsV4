@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type SportKey, type SportMeta } from "../lib/api";
 import { relativeTime } from "../lib/format";
+import { endSession, isAdmin, PLAN_LABELS, useViewer } from "../lib/session";
 import { sportFromPath, useSportContext } from "../lib/sportContext";
 import { SPORT_KEYS, SPORTS } from "../lib/sports";
 
@@ -38,7 +39,7 @@ function ThemeToggle() {
   return (
     <button
       type="button"
-      className="btn btn-ghost btn-sm"
+      className="btn btn-ghost btn-sm theme-toggle"
       onClick={() => setTheme(NEXT_THEME[theme])}
       aria-label={`Tema: ${THEME_LABELS[theme]}. Cambiar a ${THEME_LABELS[NEXT_THEME[theme]]}`}
       title={`Tema: ${THEME_LABELS[theme]}`}
@@ -90,7 +91,7 @@ function SyncStatus({ sport }: { sport: SportKey }) {
   );
 }
 
-function BrandMark({ sport }: { sport: SportKey }) {
+export function BrandMark({ sport }: { sport: SportKey }) {
   return (
     <svg className="brand-mark" viewBox="0 0 100 100" aria-hidden="true">
       <circle cx="50" cy="50" r="46" fill="var(--accent)" />
@@ -142,8 +143,35 @@ function SportSwitch({ context }: { context: SportKey | null }) {
   );
 }
 
+/** Usuario y plan (lleva a "Tu cuenta") y Salir. */
+function UserMenu() {
+  const viewer = useViewer();
+  const client = useQueryClient();
+  const [leaving, setLeaving] = useState(false);
+  const leave = async () => {
+    setLeaving(true);
+    try {
+      await endSession(client);
+    } catch {
+      setLeaving(false); // la sesión local ya se cerró; si falló el servidor, la cookie vence sola
+    }
+  };
+  return (
+    <div className="user-menu">
+      <NavLink to="/cuenta" className="user-chip" aria-label={`Tu cuenta: ${viewer.username}, plan ${PLAN_LABELS[viewer.plan]}`}>
+        <span className="user-name">{viewer.username}</span>
+        <span className={`badge ${viewer.full ? "badge-live" : "badge-neutral"}`}>{PLAN_LABELS[viewer.plan]}</span>
+      </NavLink>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={leave} disabled={leaving}>
+        Salir
+      </button>
+    </div>
+  );
+}
+
 export function Header() {
   const { context, sport } = useSportContext();
+  const viewer = useViewer();
   return (
     <header className="app-header">
       <NavLink to={`/${sport}`} className="brand" aria-label="Gorgo Predictions, inicio">
@@ -159,10 +187,12 @@ export function Header() {
         <NavLink to="/historial">Historial</NavLink>
         <NavLink to="/mis-apuestas">Mis apuestas</NavLink>
         <NavLink to={`/rendimiento?deporte=${sport}`}>Rendimiento</NavLink>
+        {isAdmin(viewer) && <NavLink to="/usuarios">Usuarios</NavLink>}
       </nav>
       <div className="header-right">
         <SyncStatus sport={sport} />
         <ThemeToggle />
+        <UserMenu />
       </div>
     </header>
   );

@@ -35,6 +35,11 @@ def add_futbol_fixture(db, fixture_id, status="NS", starts=STARTS, match_date="2
     )
 
 
+def owner_id(db) -> int:
+    """La cuenta del dueño que crea la migración (GorgoAdmin)."""
+    return db.execute("SELECT id FROM core.users WHERE username = 'GorgoAdmin'").fetchone()["id"]
+
+
 def match_id(db, sport, external_id) -> int:
     return db.execute(
         "SELECT id FROM core.matches WHERE sport = %s AND external_id = %s", (sport, external_id)

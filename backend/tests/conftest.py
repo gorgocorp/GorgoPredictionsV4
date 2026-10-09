@@ -10,8 +10,17 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+from app.core import accounts
 from app.db import migrate
 from tests.pg import TEST_DB, recreate_database
+
+
+@pytest.fixture(autouse=True, scope="session")
+def fast_password_hashing() -> Iterator[None]:
+    """scrypt barato en pruebas: el costo real (~0.5 s por contraseña) no cambia lo que se prueba."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(accounts, "SCRYPT_N", 2**10)
+        yield
 
 
 @pytest.fixture(scope="session")

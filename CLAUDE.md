@@ -12,7 +12,7 @@ GorgoNBAParlays y GorgoPredictionsV3. Plan, fases y decisiones: `docs/PLAN_UNION
   `backend/migrations/` (nunca `CREATE TABLE` desde un job), parámetros para valores y `psycopg.sql.Identifier` para
   identificadores dinámicos, transacciones cortas, restricciones reales en la base.
 - Esquemas: `nba` y `futbol` (tablas de cada deporte con los IDs de su proveedor, que son espacios distintos) y `core`
-  (partidos registrados, picks, parlays, apuestas, ingestas). Toda consulta lleva el esquema explícito. Lo que cruza
+  (partidos registrados, picks, parlays, apuestas, ingestas, cuentas y sesiones). Toda consulta lleva el esquema explícito. Lo que cruza
   deportes se refiere a partidos por `core.matches.id`, nunca por el ID del proveedor solo.
 - APIs: no inventar campos, IDs ni endpoints; consultar `docs/apis/*_campos_verificados.md` y los inventarios.
 - Estructura: lo común vive una sola vez en `backend/app/core/`; lo de cada deporte en `backend/app/sports/<deporte>/`
@@ -24,6 +24,11 @@ GorgoNBAParlays y GorgoPredictionsV3. Plan, fases y decisiones: `docs/PLAN_UNION
   patrones; textos en español de México. Igual que el backend: lo común en `frontend/src/{components,pages,lib}` y
   lo de cada deporte en `frontend/src/sports/<deporte>/` (su `config.ts` configura las piezas comunes). Los tipos de
   `api.ts` reflejan lo que devuelve la API: no inventar campos.
+- Cuentas (`docs/PLAN_USUARIOS.md`): todo pide sesión. Lo que ve cada plan lo decide la API con
+  `app/core/access.py` (a una cuenta free no le llegan los datos que no incluye su plan; difuminar en la interfaz no
+  basta). Toda ruta nueva que devuelva picks, proyecciones o parlays pasa por ahí, y las que cambian lo que ven todos
+  (recalcular, bajas) piden admin. Las apuestas se leen y se borran siempre por `user_id`. Nunca guardar una
+  contraseña en el repositorio, una migración o un archivo de ejemplo.
 - Reportes: ✅ Correcto · 🟡 Parcial · ❌ Incorrecto · 🎨 Sólo apariencia · ⚠️ Riesgo (psycopg.md §17). No declarar
   nada terminado sin la prueba que lo demuestre; distinguir prueba con mocks, con PostgreSQL real y en producción.
 

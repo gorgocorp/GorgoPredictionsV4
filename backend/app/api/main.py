@@ -2,8 +2,10 @@
 
 - /api/nba/* y /api/futbol/*: lo propio de cada deporte (día, piernas, plantel, bajas, jornadas).
 - /api/meta, /api/bets, /api/history, /api/performance: lo común (un boleto puede mezclar deportes).
-Lee lo que registra el scheduler y permite recalcular un día. Si STATIC_DIR apunta a la interfaz compilada,
-también la sirve (una sola app en Docker).
+- /api/auth/*: entrar y salir; /api/admin/*: cuentas (sólo admin).
+Todo lo demás pide sesión; lo que ve cada plan lo decide app/core/access.py. Lee lo que registra el scheduler y
+permite recalcular un día (sólo admin). Si STATIC_DIR apunta a la interfaz compilada, también la sirve (una sola
+app en Docker; la interfaz se sirve sin sesión para poder mostrar la pantalla de entrar).
 
 Local:  uvicorn app.api.main:app --reload   (desde backend/)
 """
@@ -14,12 +16,16 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
+from app.api import admin, auth
+from app.api.auth import current_viewer, full_viewer
 from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS, SHARP_BOOKMAKER
+from app.core.access import free_visible_picks, lock_legs
+from app.core.accounts import Viewer
 from app.core.bets import BetError, LegInput, create_bet, delete_bet, list_bets
 from app.core.evidence import summarize
 from app.core.sport import Sport
@@ -33,8 +39,13 @@ SPORT_APIS = {"nba": nba_api, "futbol": futbol_api}
 
 app = FastAPI(title="GorgoPredictions V4", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.include_router(auth.router)
+app.include_router(admin.router)
 for module in SPORT_APIS.values():
-    app.include_router(module.router)
+    app.include_router(module.router, dependencies=[Depends(current_viewer)])
+
+# Rutas comunes: todas piden sesión. Se incluyen en `app` al final del archivo, ya con sus rutas.
+api = APIRouter(dependencies=[Depends(current_viewer)])
 
 
 def _sports() -> dict[str, Sport]:
@@ -52,7 +63,7 @@ def _now() -> datetime:
     return datetime.now(LOCAL_TZ)
 
 
-@app.get("/api/meta")
+@api.get("/api/meta")
 def meta() -> dict:
     with connect() as conn:
         sports = {key: SPORT_APIS[key].meta(conn) for key in _sports()}
@@ -129,7 +140,7 @@ def _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_prese
     ).fetchall()
 
 
-def _history_legs(conn, rows: list[dict]) -> dict[int, list[dict]]:
+def _history_legs(conn, rows: list[dict], viewer: Viewer) -> dict[int, list[dict]]:
     legs: dict[int, list[dict]] = {}
     for key, sport in _sports().items():
         ids = [r["id"] for r in rows if r["sport"] == key]
@@ -157,7 +168,7 @@ def _history_legs(conn, rows: list[dict]) -> dict[int, list[dict]]:
             )
     for items in legs.values():
         items.sort(key=lambda leg: leg["position"])
-    return legs
+    return lock_legs(conn, legs, viewer.full, _now())
 
 
 def _profit(p: dict) -> float | None:
@@ -166,7 +177,7 @@ def _profit(p: dict) -> float | None:
     return p["settled_odd"] - 1 if p["result"] == "won" else -1.0
 
 
-@app.get("/api/history")
+@api.get("/api/history")
 def history(
     sport: str | None = None,
     desde: date | None = None,
@@ -177,13 +188,17 @@ def history(
     include_preseason: bool = True,
     limit: int = 20,
     offset: int = 0,
+    viewer: Viewer = Depends(current_viewer),
 ) -> dict:
-    """Parlays sugeridos por el sistema: qué se predijo, cuándo y qué pasó en realidad."""
+    """Parlays sugeridos por el sistema: qué se predijo, cuándo y qué pasó en realidad.
+
+    A una cuenta free le llegan bloqueadas (sin el pick) las piernas que no ve: ver app/core/access.py.
+    """
     limit = max(1, min(limit, 100))
     with connect() as conn:
         rows = _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason)
         page = rows[offset : offset + limit]
-        legs = _history_legs(conn, page) if page else {}
+        legs = _history_legs(conn, page, viewer) if page else {}
     return {
         "summary": summarize(rows),
         "total": len(rows),
@@ -194,6 +209,7 @@ def history(
                                      "bookmaker", "model_version")},
                 "profit": _profit(r),
                 "recorded_before_start": r["evaluated_at"] < r["first_start"],
+                "locked": any(leg["locked"] for leg in legs.get(r["id"], [])),
                 "legs": legs.get(r["id"], []),
             }
             for r in page
@@ -205,7 +221,7 @@ RESULT_ES = {"won": "ganado", "lost": "perdido", "void": "anulado", None: "pendi
 MODE_ES = {"prob": "máxima probabilidad", "ev": "máximo valor"}
 
 
-@app.get("/api/history.csv")
+@api.get("/api/history.csv")
 def history_csv(
     sport: str | None = None,
     desde: date | None = None,
@@ -214,12 +230,13 @@ def history_csv(
     n_legs: int | None = None,
     result: str | None = None,
     include_preseason: bool = True,
+    viewer: Viewer = Depends(full_viewer),
 ) -> Response:
-    """El mismo historial en CSV, una fila por pierna (abre bien en Excel)."""
+    """El mismo historial en CSV, una fila por pierna (abre bien en Excel). Con plan completo."""
     sports = _sports()
     with connect() as conn:
         rows = _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason)
-        legs = _history_legs(conn, rows) if rows else {}
+        legs = _history_legs(conn, rows, viewer) if rows else {}
     out = io.StringIO()
     out.write("﻿")  # BOM: Excel reconoce los acentos
     writer = csv.writer(out)
@@ -265,19 +282,30 @@ class BetIn(BaseModel):
     note: str | None = None
 
 
-@app.get("/api/bets")
-def bets() -> dict:
+@api.get("/api/bets")
+def bets(viewer: Viewer = Depends(current_viewer)) -> dict:
+    """Las apuestas de quien inició sesión."""
     with connect() as conn:
-        return list_bets(conn, _now(), _sports())
+        return list_bets(conn, viewer.id, _now(), _sports())
 
 
-@app.post("/api/bets", status_code=201)
-def register_bet(bet: BetIn) -> dict:
-    """Registra una apuesta real (puede mezclar NBA y fútbol). Sólo antes de que empiece el primer partido."""
+@api.post("/api/bets", status_code=201)
+def register_bet(bet: BetIn, viewer: Viewer = Depends(current_viewer)) -> dict:
+    """Registra una apuesta real (puede mezclar NBA y fútbol). Sólo antes de que empiece el primer partido.
+
+    Una cuenta free sólo registra piernas que ve (las de los parlays gratis).
+    """
+    now = _now()
     with connect() as conn:
+        pick_ids = [leg.pick_id for leg in bet.legs]
+        if not viewer.full and not set(pick_ids) <= free_visible_picks(conn, pick_ids, now):
+            raise HTTPException(
+                status_code=403,
+                detail="El boleto lleva piernas que no incluye tu plan o que ya no existen. Recarga la página y vuelve a armarlo.",
+            )
         try:
             bet_id = create_bet(
-                conn, bet.bookmaker, bet.stake, [LegInput(leg.pick_id, leg.odd) for leg in bet.legs], _now(),
+                conn, viewer.id, bet.bookmaker, bet.stake, [LegInput(leg.pick_id, leg.odd) for leg in bet.legs], now,
                 total_odd=bet.total_odd, note=bet.note,
             )
         except BetError as exc:
@@ -285,11 +313,11 @@ def register_bet(bet: BetIn) -> dict:
     return {"id": bet_id}
 
 
-@app.delete("/api/bets/{bet_id}")
-def remove_bet(bet_id: int) -> dict:
+@api.delete("/api/bets/{bet_id}")
+def remove_bet(bet_id: int, viewer: Viewer = Depends(current_viewer)) -> dict:
     with connect() as conn:
         try:
-            delete_bet(conn, bet_id, _now())
+            delete_bet(conn, viewer.id, bet_id, _now())
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except BetError as exc:
@@ -300,13 +328,16 @@ def remove_bet(bet_id: int) -> dict:
 # ---------------------------------------------------------------- rendimiento
 
 
-@app.get("/api/performance")
+@api.get("/api/performance")
 def performance(sport: str, include_preseason: bool = False, league: int | None = None) -> dict:
     """Rendimiento de un deporte. NBA: sin pretemporada salvo `include_preseason`; fútbol: `league` opcional."""
     s = _sport(sport)
     filters = {"include_preseason": include_preseason} if s.key == "nba" else {"league": league}
     with connect() as conn:
         return performance_data(conn, s, **filters)
+
+
+app.include_router(api)
 
 
 # ---------------------------------------------------------------- interfaz compilada

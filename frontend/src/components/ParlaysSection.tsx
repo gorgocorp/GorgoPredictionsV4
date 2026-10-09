@@ -34,7 +34,7 @@ function summaryParts(config: SportConfig, p: Preferences, bookmaker: string): s
   return parts;
 }
 
-function ParlayCard({
+export function ParlayCard({
   config,
   parlay,
   games,

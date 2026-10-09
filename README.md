@@ -20,6 +20,10 @@ Desde la noche del 6-oct-2026 V4 es el sistema oficial: sincroniza, registra pic
 (interfaz en `http://localhost:8300`). Los dos proyectos anteriores quedaron apagados como archivo, sin borrar nada; no
 se vuelven a prender (su scheduler duplicaría la cuota de la API).
 
+Desde el 8-oct-2026 todo pide sesión, con tres planes: **free** (parlays gratis del día, historial y rendimiento),
+**suscriptor** (todo) y **admin** (todo, recalcular, bajas y cuentas). Qué ve cada uno y cómo está hecho:
+[docs/PLAN_USUARIOS.md](docs/PLAN_USUARIOS.md).
+
 ## Requisitos
 
 - Docker Desktop
@@ -38,6 +42,9 @@ npm --prefix frontend install
 El servicio completo (base, scheduler y web) corre en Docker: `docker compose --profile servicio up -d --build` →
 interfaz y API en `http://localhost:8300`. Los contenedores se reinician solos con Docker Desktop.
 
+La primera vez (o después de la migración `0007`), pon la contraseña del dueño: `docker compose run --rm app
+set-password GorgoAdmin`. Las demás cuentas se crean en la página **Usuarios** o con `create-user`.
+
 ## Comandos
 
 Desde `backend/` con `../.venv/Scripts/python -m app.cli <comando>` (o `docker compose run --rm app <comando>`).
@@ -48,6 +55,10 @@ Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos 
 | `migrate` | Crea/actualiza el esquema |
 | `summary` | Filas por tabla |
 | `import-legacy [--replace]` | Historial de los dos proyectos anteriores (sólo los lee) |
+| `users` | Cuentas, su plan, vencimiento y cuántas apuestas tienen |
+| `create-user USUARIO [--role free\|subscriber\|admin] [--until YYYY-MM-DD]` | Crea una cuenta (pide la contraseña) |
+| `set-password USUARIO` | Pone la contraseña (la pide sin mostrarla) y cierra sus sesiones |
+| `set-plan USUARIO ROL [--until YYYY-MM-DD] [--disable]` | Cambia el plan, el vencimiento o desactiva la cuenta |
 | `parity --sport X [--date D]…` | Compara el motor de V4 con el del proyecto anterior para los mismos días y datos |
 | `status [--sport X]` | Plan y consumo de cada API (no gasta cuota) |
 | `sync [--sport X]` | Temporada en curso: partidos, estadísticas, bajas y momios |
@@ -63,7 +74,9 @@ Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos 
 
 API local (desde `backend/`): `../.venv/Scripts/python -m uvicorn app.api.main:app --port 8301 --reload`;
 documentación en `http://localhost:8301/api/docs`. Rutas de cada deporte en `/api/nba/*` y `/api/futbol/*`;
-comunes en `/api/meta`, `/api/bets` (boleto mixto), `/api/history[.csv]?sport=` y `/api/performance?sport=`.
+comunes en `/api/meta`, `/api/bets` (boleto mixto), `/api/history[.csv]?sport=` y `/api/performance?sport=`; cuentas
+en `/api/auth/*` (entrar, salir, quién soy, cambiar contraseña) y `/api/admin/users` (sólo admin). Todo lo demás
+responde 401 sin sesión.
 Si existe `frontend/dist` (`npm --prefix frontend run build`), la misma API sirve la interfaz en `http://localhost:8301`.
 
 Interfaz en desarrollo: `npm --prefix frontend run dev` → `http://localhost:5173` (manda `/api` a la API local del
@@ -79,7 +92,8 @@ Pruebas:
 
 ```
 backend/app/
-├── core/            # lo común: parlays, registro y liquidación de picks, tus apuestas, evidencia, ingesta
+├── core/            # lo común: parlays, registro y liquidación de picks, apuestas, evidencia, ingesta,
+│                    # cuentas y sesiones (accounts.py) y qué ve cada plan (access.py)
 ├── sports/
 │   ├── nba/         # modelos, ingesta (API-Basketball + reporte de lesiones) y su contrato (sport.py)
 │   └── futbol/      # modelos, ingesta (API-Football) y su contrato (sport.py)
@@ -95,11 +109,12 @@ frontend/src/
 ├── sports/
 │   ├── nba/         # config.ts (mercados, estadísticas, etiquetas), tarjeta de partido, bajas, Día
 │   └── futbol/      # config.ts, tarjeta de partido, bajas, Día y Jornada (jornada o rango de fechas)
-├── pages/           # Historial, Mis apuestas y Rendimiento (con filtro de deporte)
+├── pages/           # Historial, Mis apuestas, Rendimiento; Entrar, Tu cuenta y Usuarios (admin)
 └── lib/             # API, preferencias por deporte, boleto, armado de parlays, formatos
 ```
 
-- La interfaz es una sola: `/nba`, `/futbol`, `/futbol/jornada`, `/historial`, `/mis-apuestas`, `/rendimiento`.
+- La interfaz es una sola: `/nba`, `/futbol`, `/futbol/jornada`, `/historial`, `/mis-apuestas`, `/rendimiento`,
+  `/cuenta` y `/usuarios` (admin). Sin sesión, cualquier ruta muestra "Entrar".
   El boleto acepta piernas de los dos deportes; cada deporte guarda sus preferencias (mercados, ligas, mínimos) y
   tu casa de apuestas es común. El color de acento cambia con el deporte (naranja NBA, índigo fútbol).
 - Los modelos e ingestas de cada deporte se copiaron casi textuales de su proyecto (sólo cambian los imports y los
@@ -160,7 +175,7 @@ Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían 
 - `futbol`: tablas de fútbol tal como estaban en GorgoPredictionsV3 (IDs de API-Football).
 - `core`: lo que cruza deportes. `core.matches` da a cada partido una identidad común (los IDs de los dos proveedores
   chocan entre sí), y `core.picks`, `core.parlays` y `core.user_bets` se refieren a él: un boleto puede mezclar NBA y
-  fútbol.
+  fútbol. `core.users` y `core.sessions` son las cuentas; cada apuesta es de una (`core.user_bets.user_id`).
 
 ### Importación del historial (`import-legacy`)
 
@@ -180,6 +195,7 @@ Los archivos locales de los proyectos anteriores (muestras de la API, reportes y
 ## Documentación técnica
 
 - [Plan de unión](docs/PLAN_UNION.md)
+- [Cuentas y planes](docs/PLAN_USUARIOS.md)
 - [Python y PostgreSQL con Psycopg 3](docs/database/psycopg.md)
 - APIs: [API-Basketball](docs/apis/API_Basketball_1_5_endpoints.md) ([campos verificados](docs/apis/API_Basketball_campos_verificados.md)),
   [API-Football](docs/apis/API_FOOTBALL_3_9_3_endpoints.md) ([campos verificados](docs/apis/API_Football_campos_verificados.md))

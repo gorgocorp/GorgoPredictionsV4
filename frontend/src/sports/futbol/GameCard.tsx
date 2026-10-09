@@ -1,3 +1,4 @@
+import { LockedProjection } from "../../components/Locked";
 import type { GameCardProps } from "../../components/SlateBody";
 import { localTime, pct, shortTeam } from "../../lib/format";
 import type { Absence, Game } from "./api";
@@ -131,6 +132,7 @@ export function GameCard({ game, selected, onSelect, onAbsences }: GameCardProps
           </div>
         </>
       )}
+      {game.projection_locked && <LockedProjection outcomes={3} />}
       {(home.length > 0 || away.length > 0) && (
         <div className="absences">
           <AbsenceLine team={game.home.name} absences={home} />
@@ -148,9 +150,11 @@ export function GameCard({ game, selected, onSelect, onAbsences }: GameCardProps
           <button type="button" className="btn btn-sm" onClick={onAbsences}>
             Bajas{game.absences.length > 0 ? ` (${game.absences.length})` : ""}
           </button>
-          <button type="button" className="btn btn-sm" aria-pressed={selected} onClick={onSelect} disabled={game.picks_count === 0}>
-            {selected ? "Quitar filtro" : "Ver piernas"}
-          </button>
+          {onSelect && (
+            <button type="button" className="btn btn-sm" aria-pressed={selected} onClick={onSelect} disabled={game.picks_count === 0}>
+              {selected ? "Quitar filtro" : "Ver piernas"}
+            </button>
+          )}
         </span>
       </div>
     </article>

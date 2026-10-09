@@ -1,6 +1,6 @@
-"""Apuestas reales del usuario ("Mis apuestas"): registro, liquidación y resumen.
+"""Apuestas reales de cada usuario ("Mis apuestas"): registro, liquidación y resumen.
 
-El boleto guarda los momios de la casa del usuario (p. ej. Caliente, que no está en la API) y una copia
+Cada apuesta es de una cuenta (core.user_bets.user_id): sólo ella la ve y la borra. El boleto guarda los momios de la casa del usuario (p. ej. Caliente, que no está en la API) y una copia
 de lo que dijo el modelo. Sólo se registra antes del primer partido. Puede mezclar NBA y fútbol.
 """
 
@@ -72,6 +72,7 @@ def summarize_bets(bets: list[dict[str, Any]]) -> dict[str, Any]:
 
 def create_bet(
     conn: psycopg.Connection,
+    user_id: int,
     bookmaker: str,
     stake: float,
     legs: list[LegInput],
@@ -115,10 +116,10 @@ def create_bet(
     with conn.transaction():
         bet_id = conn.execute(
             """
-            INSERT INTO core.user_bets (bookmaker, stake, odd, model_probability, note, created_at, first_start)
-            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, note, created_at, first_start)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
-            (bookmaker.strip(), round(stake, 2), round(odd, 3), round(probability, 6), note, now, first_start),
+            (user_id, bookmaker.strip(), round(stake, 2), round(odd, 3), round(probability, 6), note, now, first_start),
         ).fetchone()["id"]
         with conn.cursor() as cur:
             cur.executemany(
@@ -134,8 +135,9 @@ def create_bet(
     return bet_id
 
 
-def delete_bet(conn: psycopg.Connection, bet_id: int, now: datetime) -> None:
-    bet = conn.execute("SELECT first_start FROM core.user_bets WHERE id = %s", (bet_id,)).fetchone()
+def delete_bet(conn: psycopg.Connection, user_id: int, bet_id: int, now: datetime) -> None:
+    # La de otra cuenta "no existe": no se confirma ni que el ID sea válido.
+    bet = conn.execute("SELECT first_start FROM core.user_bets WHERE id = %s AND user_id = %s", (bet_id, user_id)).fetchone()
     if bet is None:
         raise LookupError("Apuesta no encontrada")
     if bet["first_start"] <= now:
@@ -182,13 +184,14 @@ def bet_legs(conn: psycopg.Connection, sports: Mapping[str, "Sport"], bet_ids: l
     return legs
 
 
-def list_bets(conn: psycopg.Connection, now: datetime, sports: Mapping[str, "Sport"]) -> dict[str, Any]:
+def list_bets(conn: psycopg.Connection, user_id: int, now: datetime, sports: Mapping[str, "Sport"]) -> dict[str, Any]:
     bets = conn.execute(
         """
         SELECT id, bookmaker, stake::float AS stake, odd::float AS odd, model_probability::float AS model_probability,
                note, created_at, first_start, result, settled_odd::float AS settled_odd, payout::float AS payout, settled_at
-        FROM core.user_bets ORDER BY created_at DESC
-        """
+        FROM core.user_bets WHERE user_id = %s ORDER BY created_at DESC
+        """,
+        (user_id,),
     ).fetchall()
     legs = bet_legs(conn, sports, [b["id"] for b in bets]) if bets else {}
     items = [

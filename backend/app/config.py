@@ -33,6 +33,10 @@ PRICE_BOOKMAKERS = list(
 )
 
 
+# Cookie de sesión sólo por HTTPS. Apagada en local (http://localhost); se prende al publicar el sitio con HTTPS.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+
+
 def _require(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
