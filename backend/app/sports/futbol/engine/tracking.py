@@ -12,8 +12,8 @@ from psycopg.types.json import Jsonb
 from app.sports.futbol.engine.evidence import CANCELLED, player_value
 from app.sports.futbol.engine.legs import LegSpec, settle
 
-# Cambiar cuando los modelos cambien de forma relevante, para separar su rendimiento.
-MODEL_VERSION = "v1"
+# Cambiar cuando los modelos cambien de forma relevante, para separar su rendimiento (registro: docs/MODELOS.md).
+MODEL_VERSION = "v2"
 
 # Qué piernas se guardan: prácticamente todas las evaluadas, también las poco probables, para
 # que el usuario pueda registrar en "Mis apuestas" cualquier pierna que apueste en su casa.

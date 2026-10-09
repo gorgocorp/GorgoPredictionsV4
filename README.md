@@ -120,6 +120,7 @@ frontend/src/
 - Los modelos e ingestas de cada deporte se copiaron casi textuales de su proyecto (sólo cambian los imports y los
   nombres de tabla, ahora con esquema). Cómo decide cada motor: ver "Cómo decide el motor" en el README de
   [GorgoNBAParlays](../GorgoNBAParlays/README.md) y de [GorgoPredictionsV3](../GorgoPredictionsV3/README.md).
+  Lo que cambió después, con su backtest, está en [Cambios a los modelos](docs/MODELOS.md).
 - Lo que estaba duplicado (armar y congelar parlays, guardar y liquidar piernas, tus apuestas, resumen de evidencia)
   vive una sola vez en `core/`, y cada deporte aporta lo suyo con el contrato `app/core/sport.py`.
 
@@ -135,6 +136,9 @@ probabilidades, momios y proyecciones que los proyectos anteriores (diferencia m
 
 Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían registrado para el 7-oct
 (3,010 piernas y 4 parlays de NBA; 1,330 piernas y 10 parlays de fútbol, sin una sola diferencia).
+
+Esto vale para los modelos `v1`. Desde fútbol `v2` (identidad de árbitros), las tarjetas difieren a propósito del
+proyecto anterior; ver [Cambios a los modelos](docs/MODELOS.md).
 
 ## Momios de publicación, cierre y CLV
 
@@ -196,6 +200,7 @@ Los archivos locales de los proyectos anteriores (muestras de la API, reportes y
 
 - [Plan de unión](docs/PLAN_UNION.md)
 - [Cuentas y planes](docs/PLAN_USUARIOS.md)
+- [Cambios a los modelos](docs/MODELOS.md) (versiones y sus backtests)
 - [Python y PostgreSQL con Psycopg 3](docs/database/psycopg.md)
 - APIs: [API-Basketball](docs/apis/API_Basketball_1_5_endpoints.md) ([campos verificados](docs/apis/API_Basketball_campos_verificados.md)),
   [API-Football](docs/apis/API_FOOTBALL_3_9_3_endpoints.md) ([campos verificados](docs/apis/API_Football_campos_verificados.md))

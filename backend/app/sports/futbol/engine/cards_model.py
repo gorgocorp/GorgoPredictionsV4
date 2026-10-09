@@ -4,7 +4,8 @@
                               + propias[equipo] + provocadas[rival] + árbitro
 
 Mismo ajuste que el modelo de goles (Poisson con ridge y peso por recencia). El árbitro pesa
-mucho en tarjetas; la API lo publica en el partido (a veces sólo unas horas antes). Si no se
+mucho en tarjetas; la API lo publica en el partido (a veces sólo unas horas antes) y con nombres que
+cambian ('J. Stinat', 'Jeremy Stinat, France'): referees.py junta las variantes de cada árbitro. Si no se
 conoce, su efecto es 0 (árbitro promedio).
 
 Las tarjetas de un equipo se comportan como Poisson, pero las del partido están sobredispersas
@@ -22,7 +23,8 @@ import pandas as pd
 from app.sports.futbol.config import LEAGUES
 from app.sports.futbol.engine.dist import prob_over
 from app.sports.futbol.engine.glm import fit_poisson_ridge
-from app.sports.futbol.engine.history import History, recency_weights, referee_key
+from app.sports.futbol.engine.history import History, recency_weights
+from app.sports.futbol.engine.referees import Referees
 
 COMPS = sorted(LEAGUES)
 COMP_INDEX = {c: i for i, c in enumerate(COMPS)}
@@ -69,6 +71,7 @@ class CardsModel:
     beta: np.ndarray
     team_index: dict[int, int]
     referee_index: dict[str, int]
+    referees: Referees
     season_index: dict[tuple[int, int], int]
     dispersion_team: float
     dispersion_total: float
@@ -91,7 +94,7 @@ class CardsModel:
             eta += b[o["own"] + i]
         if (i := self.team_index.get(int(opp_id))) is not None:
             eta += b[o["opp"] + i]
-        if (i := self.referee_index.get(referee_key(referee) or "")) is not None:
+        if (i := self.referee_index.get(self.referees.key(referee, comp) or "")) is not None:
             eta += b[o["ref"] + i]
         return math.exp(eta)
 
@@ -113,7 +116,9 @@ def fit_cards_model(hist: History, as_of: date, params: CardsModelParams = Cards
 
     teams = sorted(set(g["home_team_id"]) | set(g["away_team_id"]))
     team_index = {int(t): i for i, t in enumerate(teams)}
-    refs = sorted({r for r in g["referee_key"] if r})
+    referees = Referees.build(g["referee"], g["league_id"], g["match_date"])
+    ref_keys = [referees.key(r, lg) for r, lg in zip(g["referee"], g["league_id"])]
+    refs = sorted({r for r in ref_keys if r})
     referee_index = {r: i for i, r in enumerate(refs)}
     seasons = sorted(set(zip(g["league_id"].astype(int), g["season"].astype(int))))
     season_index = {s: i for i, s in enumerate(seasons)}
@@ -127,7 +132,7 @@ def fit_cards_model(hist: History, as_of: date, params: CardsModelParams = Cards
     comp = g["league_id"].map(COMP_INDEX).to_numpy()
     hi = g["home_team_id"].map(team_index).to_numpy()
     ai = g["away_team_id"].map(team_index).to_numpy()
-    ri = np.array([referee_index.get(r, -1) if r else -1 for r in g["referee_key"]])
+    ri = np.array([referee_index[r] if r else -1 for r in ref_keys])
     ref_col = np.where(ri >= 0, o_ref + ri, unknown_ref)
     ref_val = (ri >= 0).astype(float)
 
@@ -159,6 +164,7 @@ def fit_cards_model(hist: History, as_of: date, params: CardsModelParams = Cards
         beta=beta,
         team_index=team_index,
         referee_index=referee_index,
+        referees=referees,
         season_index=season_index,
         dispersion_team=DISPERSION_TEAM,
         dispersion_total=DISPERSION_TOTAL,

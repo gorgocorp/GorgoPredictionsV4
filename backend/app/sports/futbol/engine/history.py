@@ -50,14 +50,6 @@ def _frame(conn: psycopg.Connection, query: str) -> pd.DataFrame:
     return df
 
 
-def referee_key(name: str | None) -> str | None:
-    """'Thomas Bramall, England' -> 'thomas bramall'."""
-    if not name or not isinstance(name, str):
-        return None
-    key = name.split(",")[0].strip().lower()
-    return key or None
-
-
 @dataclass
 class History:
     fixtures: pd.DataFrame
@@ -73,7 +65,6 @@ class History:
         for col in ("ft_home", "ft_away", "home_xg", "away_xg", "home_cards", "away_cards", "home_shots_on", "away_shots_on"):
             f[col] = pd.to_numeric(f[col], errors="coerce").astype(float)
         f["is_cup"] = f["league_id"].isin(CUPS)
-        f["referee_key"] = f["referee"].map(referee_key)
         f.sort_values(["match_date", "starts_at"], inplace=True)
         f.reset_index(drop=True, inplace=True)
 
