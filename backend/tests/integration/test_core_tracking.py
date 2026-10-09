@@ -45,10 +45,14 @@ def with_engine(sport_key: str, cards: list[Card]):
 
 
 def card(sport: str, match: int, starts: str, legs: list[tuple]) -> Card:
+    """Cada pierna: (spec, descripción, p, momio de la casa del sistema[, momios de las casas de la lista])."""
     return Card(
         match,
         pd.Timestamp(starts),
-        [Candidate(sport, match, "A vs B", spec, desc, p, odd=odd) for spec, desc, p, odd in legs],
+        [
+            Candidate(sport, match, "A vs B", spec, desc, p, odd=odd, book_odds=books[0] if books else {})
+            for spec, desc, p, odd, *books in legs
+        ],
     )
 
 

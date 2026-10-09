@@ -19,7 +19,7 @@ function legOf(sport: SportKey, overrides: Partial<Leg>): Leg {
     player_name: "X",
     description: "pierna",
     p_model: 0.7,
-    odd: null,
+    odd: 1.5,
     bookmaker: null,
     p_market: null,
     hits_10: null,
@@ -67,13 +67,21 @@ describe("fútbol", () => {
       expect(isEligible(leg({ p_model: 0.55 }), prefs(), "prob")).toBe(false);
       expect(isEligible(leg({ p_model: 0.95 }), prefs(), "prob")).toBe(false); // tope 92%
       expect(isEligible(leg({ p_model: 0.7, odd: 1.1 }), prefs(), "prob")).toBe(false); // paga menos de 1.15
-      expect(isEligible(leg({ p_model: 0.7 }), prefs({ onlyPriced: true }), "prob")).toBe(false);
+      expect(isEligible(leg({ p_model: 0.7, odd: null, book_odds: { "1xBet": 1.5 } }), prefs({ onlyPriced: true }), "prob")).toBe(false);
     });
 
     it("en modo valor exige momio y EV positivo", () => {
       expect(isEligible(leg({ p_model: 0.7, odd: null }), prefs(), "ev")).toBe(false);
       expect(isEligible(leg({ p_model: 0.7, odd: 1.3 }), prefs(), "ev")).toBe(false); // EV -9%
       expect(isEligible(leg({ p_model: 0.7, odd: 1.5 }), prefs(), "ev")).toBe(true);
+    });
+
+    it("sólo piernas que cotiza alguna casa; sin la casa elegida, el mínimo va contra el mejor de las otras", () => {
+      expect(isEligible(leg({ p_model: 0.7, odd: null }), prefs(), "prob")).toBe(false); // ninguna casa la cotiza
+      expect(isEligible(leg({ p_model: 0.7, odd: null, book_odds: { Pinnacle: 1.3, "1xBet": 1.25 } }), prefs(), "prob")).toBe(true);
+      // La cotizan pero casi no paga, aunque su momio justo (1.18) sí pasaría.
+      expect(isEligible(leg({ p_model: 0.85, odd: null, book_odds: { "1xBet": 1.07 } }), prefs(), "prob")).toBe(false);
+      expect(isEligible(leg({ p_model: 0.7, odd: null, book_odds: { Pinnacle: 1.3 } }), prefs(), "ev")).toBe(false);
     });
   });
 
@@ -155,7 +163,7 @@ describe("NBA", () => {
       expect(isEligible(leg({ p_model: 0.55 }), prefs(), "prob")).toBe(false);
       expect(isEligible(leg({ p_model: 0.95 }), prefs(), "prob")).toBe(false); // tope 92%
       expect(isEligible(leg({ p_model: 0.7, odd: 1.1 }), prefs(), "prob")).toBe(false); // paga menos de 1.15
-      expect(isEligible(leg({ p_model: 0.7 }), prefs({ onlyPriced: true }), "prob")).toBe(false);
+      expect(isEligible(leg({ p_model: 0.7, odd: null, book_odds: { "1xBet": 1.5 } }), prefs({ onlyPriced: true }), "prob")).toBe(false);
     });
 
     it("en modo valor exige momio y EV positivo", () => {

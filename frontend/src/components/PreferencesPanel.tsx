@@ -206,7 +206,8 @@ export function PreferencesPanel({
               Incluir jugadores en duda ({config.questionableSource})
             </label>
             <p className="muted xs" style={{ margin: 0 }}>
-              Más probabilidad por pierna = parlays que pegan más seguido pero pagan menos. Sin momio de la casa se usa el momio justo.
+              Más probabilidad por pierna = parlays que pegan más seguido pero pagan menos. Sólo entran piernas que cotiza alguna
+              casa; si {bookmaker} no la cotiza, el momio mínimo se compara con el mejor de las otras.
             </p>
           </fieldset>
 

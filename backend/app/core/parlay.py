@@ -39,6 +39,11 @@ class Candidate:
         return 1.0 / self.p_model
 
     @property
+    def listed_odd(self) -> float | None:
+        """Momio de la casa del sistema o, si no la cotiza, el mejor de las otras casas de PRICE_BOOKMAKERS."""
+        return self.odd or max(self.book_odds.values(), default=None)
+
+    @property
     def ev(self) -> float | None:
         """Valor esperado por unidad apostada: p·momio − 1."""
         return self.p_model * self.odd - 1.0 if self.odd else None
@@ -76,17 +81,19 @@ class Parlay:
 class ParlayFilters:
     min_prob: float = 0.60
     max_prob: float = 0.97
-    min_odd: float = 1.15  # descarta piernas que casi no pagan
+    min_odd: float = 1.15  # descarta piernas que casi no pagan (contra listed_odd; sin momio, contra el justo)
     min_ev: float | None = 0.0  # sólo con momio; None = no filtrar por EV
-    require_odds: bool = True
+    require_odds: bool = True  # momio de la casa del sistema
+    require_listed: bool = False  # momio de alguna casa de PRICE_BOOKMAKERS (aunque no sea la del sistema)
     include_questionable: bool = False  # props de jugadores "en duda" (si no juegan, se anulan)
 
 
 # Configuración estándar con la que el sistema registra y mide sus parlays (la misma en los dos deportes).
+# Ninguna usa líneas que no cotiza ninguna casa: el parlay se tiene que poder apostar.
 MODES = {
     "prob": (
         "Máxima probabilidad",
-        ParlayFilters(min_prob=0.60, max_prob=0.92, min_odd=1.15, min_ev=None, require_odds=False),
+        ParlayFilters(min_prob=0.60, max_prob=0.92, min_odd=1.15, min_ev=None, require_odds=False, require_listed=True),
     ),
     "ev": (
         "Máximo valor (sólo piernas con EV positivo contra la casa)",
@@ -109,16 +116,15 @@ def eligible(candidates: list[Candidate], filters: ParlayFilters) -> list[Candid
             continue
         if not (filters.min_prob <= c.p_model <= filters.max_prob):
             continue
-        if c.odd is None:
-            if filters.require_odds:
-                continue
-            if c.fair_odd < filters.min_odd:
-                continue
-        else:
-            if c.odd < filters.min_odd:
-                continue
-            if filters.min_ev is not None and c.ev < filters.min_ev:
-                continue
+        if c.odd is None and filters.require_odds:
+            continue
+        price = c.listed_odd
+        if price is None and filters.require_listed:
+            continue
+        if (price or c.fair_odd) < filters.min_odd:
+            continue
+        if c.odd is not None and filters.min_ev is not None and c.ev < filters.min_ev:
+            continue
         out.append(c)
     return out
 

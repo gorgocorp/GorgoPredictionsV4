@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Leg, SlateGame } from "../lib/api";
+import { bestBookOdd } from "../lib/books";
 import { buildParlays, buildWhole, type BuiltParlay, type Mode } from "../lib/builder";
 import { odds, pct, signedPct } from "../lib/format";
 import { isDefault, usePreferences, type Preferences } from "../lib/preferences";
@@ -11,7 +12,7 @@ import { useToast } from "./Toast";
 const MODE_INFO: Record<Mode, { label: string; help: string }> = {
   prob: {
     label: "Máxima probabilidad",
-    help: "Las piernas más probables de estos partidos, una por partido.",
+    help: "Las piernas más probables que ya cotiza alguna casa, una por partido.",
   },
   ev: {
     label: "Máximo valor",
@@ -58,9 +59,11 @@ export function ParlayCard({
   };
 
   const copy = async () => {
-    const lines = parlay.legs.map(
-      (l, i) => `${i + 1}. ${matchupOf(config, games.get(l.match_id))} — ${l.description}${l.odd ? ` @ ${l.odd.toFixed(2)}` : ""}`,
-    );
+    const lines = parlay.legs.map((l, i) => {
+      const other = l.odd ? null : bestBookOdd(l.book_odds);
+      const price = l.odd ? ` @ ${l.odd.toFixed(2)}` : other ? ` @ ${other.odd.toFixed(2)} (${other.book})` : "";
+      return `${i + 1}. ${matchupOf(config, games.get(l.match_id))} — ${l.description}${price}`;
+    });
     const head = `Parlay ${config.label} · ${parlay.n} piernas · prob. modelo ${pct(parlay.probability, 1)}${parlay.odd ? ` · momio ${bookmaker} ${parlay.odd.toFixed(2)}` : ""}`;
     try {
       await navigator.clipboard.writeText([head, ...lines].join("\n"));
@@ -87,32 +90,46 @@ export function ParlayCard({
         </div>
         <div className="stat">
           <span className="stat-label">{bookmaker}</span>
-          <span className="stat-value" title={parlay.ev !== null ? `EV ${signedPct(parlay.ev)}` : "Alguna pierna no tiene momio"}>
+          <span className="stat-value" title={parlay.ev !== null ? `EV ${signedPct(parlay.ev)}` : `Alguna pierna no la cotiza ${bookmaker}`}>
             {parlay.odd ? parlay.odd.toFixed(2) : "—"}
           </span>
         </div>
       </div>
       <ol className="leg-list">
-        {parlay.legs.map((l) => (
-          <li key={l.id} className="leg-item">
-            <span>
-              <span className="muted xs">{matchupOf(config, games.get(l.match_id))}</span>
-              <br />
-              {l.description}
-            </span>
-            <span className="leg-meta">
-              <span className="num">{pct(l.p_model)}</span>
-              <br />
-              <span className="muted xs num">{l.odd ? odds(l.odd) : "sin momio"}</span>
-              {l.result && (
-                <>
-                  <br />
-                  <ResultBadge result={l.result} />
-                </>
-              )}
-            </span>
-          </li>
-        ))}
+        {parlay.legs.map((l) => {
+          // Si la casa elegida no la cotiza, el mejor momio de las otras casas (con su nombre).
+          const other = l.odd ? null : bestBookOdd(l.book_odds);
+          return (
+            <li key={l.id} className="leg-item">
+              <span>
+                <span className="muted xs">{matchupOf(config, games.get(l.match_id))}</span>
+                <br />
+                {l.description}
+              </span>
+              <span className="leg-meta">
+                <span className="num">{pct(l.p_model)}</span>
+                <br />
+                {l.odd ? (
+                  <span className="muted xs num">{odds(l.odd)}</span>
+                ) : other ? (
+                  <span className="muted xs" title={`${bookmaker} no la cotiza: el mejor momio de las otras casas`}>
+                    <span className="num">{odds(other.odd)}</span>
+                    <br />
+                    en {other.book}
+                  </span>
+                ) : (
+                  <span className="muted xs">sin momio</span>
+                )}
+                {l.result && (
+                  <>
+                    <br />
+                    <ResultBadge result={l.result} />
+                  </>
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ol>
       <div className="card-actions">
         <button type="button" className="btn btn-sm btn-primary" onClick={load}>
@@ -205,7 +222,7 @@ export function ParlaysSection({
         >
           {mode === "ev"
             ? `No hay suficientes piernas con valor positivo contra ${bookmaker} en partidos distintos dentro de tus mercados. Que no haya parlay también es una respuesta: no conviene forzarlo.`
-            : "No hay al menos dos partidos con piernas que cumplan tus filtros. Prueba agregar mercados o bajar la probabilidad o el momio mínimo."}
+            : "No hay al menos dos partidos con piernas que cumplan tus filtros y que ya cotice alguna casa. Prueba agregar mercados, bajar la probabilidad o el momio mínimo, o vuelve cuando lleguen más momios."}
         </EmptyState>
       ) : (
         <div className="parlay-list">

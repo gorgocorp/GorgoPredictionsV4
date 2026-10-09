@@ -8,7 +8,7 @@ from app.sports.futbol.engine.legs import LegSpec, describe, settle
 from app.sports.futbol.engine.odds import (
     Quote, american, market_probabilities, match_player, names_match, parse_selection, sharp_probabilities,
 )
-from app.core.parlay import Candidate, ParlayFilters, build_parlay
+from app.core.parlay import MODES, Candidate, ParlayFilters, build_parlay
 from app.sports.futbol.engine.picks import book_odds, model_line_specs, team_probability
 from app.sports.futbol.engine.player_model import PlayerProjection
 from app.sports.futbol.engine.team_model import MatchPrediction, score_matrix
@@ -239,3 +239,18 @@ def test_build_parlay_skips_questionable_players_by_default():
     cands = [doubtful, _cand(1, 0.70), _cand(2, 0.80)]
     filters = ParlayFilters(min_prob=0.6, max_prob=0.95, min_odd=1.0, min_ev=None, require_odds=False)
     assert [c.p_model for c in build_parlay(cands, 2, "prob", filters).legs] == [0.80, 0.70]
+
+
+def test_standard_prob_mode_only_uses_legs_some_book_prices():
+    _, filters = MODES["prob"]
+    unlisted = _cand(1, 0.87)  # línea que no cotiza ninguna casa de la lista
+    other_book = _cand(2, 0.80)
+    other_book.book_odds = {"Pinnacle": 1.22}  # no la cotiza la casa del sistema, sí otra de la lista
+    cheap = _cand(3, 0.85)
+    cheap.book_odds = {"1xBet": 1.07}  # la cotizan, pero casi no paga (su momio justo sí pasaría)
+    system = _cand(4, 0.70, 1.40)
+    cands = [unlisted, other_book, cheap, system]
+    parlay = build_parlay(cands, 2, "prob", filters)
+    assert [c.external_id for c in parlay.legs] == [2, 4]
+    assert parlay.odd is None  # la casa del sistema no cotiza la pierna 2
+    assert build_parlay(cands, 3, "prob", filters) is None

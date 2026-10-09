@@ -1,4 +1,5 @@
 import type { Leg, Result } from "./api";
+import { bestBookOdd } from "./books";
 import { isAllowed, type Preferences } from "./preferences";
 
 /**
@@ -28,11 +29,11 @@ export function isEligible(leg: Leg, prefs: Preferences, mode: Mode): boolean {
   if (!isAllowed(leg, prefs)) return false;
   if (leg.player_status === "questionable" && !prefs.includeQuestionable) return false;
   if (leg.p_model < prefs.minProb || leg.p_model > MAX_PROB[mode]) return false;
-  if (leg.odd === null) {
-    if (mode === "ev" || prefs.onlyPriced) return false;
-    return 1 / leg.p_model >= prefs.minOdd;
-  }
-  if (leg.odd < prefs.minOdd) return false;
+  // Sólo piernas que cotiza alguna casa (el parlay se tiene que poder apostar). Si la casa elegida no la
+  // cotiza, el momio mínimo se compara con el mejor de las otras.
+  const price = leg.odd ?? bestBookOdd(leg.book_odds)?.odd ?? null;
+  if (price === null || price < prefs.minOdd) return false;
+  if (leg.odd === null) return mode !== "ev" && !prefs.onlyPriced;
   return mode !== "ev" || leg.p_model * leg.odd - 1 >= 0;
 }
 

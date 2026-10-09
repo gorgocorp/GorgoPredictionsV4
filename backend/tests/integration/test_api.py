@@ -30,8 +30,8 @@ TODAY = datetime.now(LOCAL_TZ).date()
 def app_db():
     """La app contra una base con dos partidos NBA y uno de fútbol, y cuentas de cada plan.
 
-    NBA 2001: el local es la pierna más probable y la de valor. NBA 2002: la más probable es el over (sin momio) y
-    la de valor, el local. Así el parlay de máxima probabilidad (gratis) y el de máximo valor (con suscripción)
+    NBA 2001: el local es la pierna más probable y la de valor. NBA 2002: la más probable es el over (sin momio de
+    Bet365, sólo de 1xBet) y la de valor, el local. Así el parlay de máxima probabilidad (gratis) y el de máximo valor (con suscripción)
     comparten "Gana local 2001" y difieren en la segunda pierna.
     """
     url = recreate_database("gorgo_v4_test_api")
@@ -53,7 +53,7 @@ def app_db():
         nba_2002 = card("nba", 2002, FUTURE.isoformat(), [
             (NbaLeg("ml", "home"), "Gana local 2002", 0.66, 1.6),
             (NbaLeg("ml", "away"), "Gana visitante 2002", 0.34, 2.4),
-            (NbaLeg("total", "over", 220.5), "Más de 220.5 (2002)", 0.7, None),
+            (NbaLeg("total", "over", 220.5), "Más de 220.5 (2002)", 0.7, None, {"1xBet": 1.3}),
         ])
         record_picks(conn, with_engine("nba", [nba_legs(2001, FUTURE.isoformat()), nba_2002]), None, DAY, "Bet365", now=now)
         record_picks(

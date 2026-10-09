@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Leg } from "./api";
-import { oddFor, withPrices } from "./books";
+import { bestBookOdd, oddFor, withPrices } from "./books";
 
 const leg = (overrides: Partial<Leg>): Leg => ({
   id: 1,
@@ -30,6 +30,12 @@ const leg = (overrides: Partial<Leg>): Leg => ({
 });
 
 describe("momios por casa", () => {
+  it("el mejor momio entre las casas que cotizan la pierna", () => {
+    expect(bestBookOdd({ Bet365: 1.54, "1xBet": 1.6, Pinnacle: 1.58 })).toEqual({ book: "1xBet", odd: 1.6 });
+    expect(bestBookOdd({})).toBeNull();
+    expect(bestBookOdd(null)).toBeNull();
+  });
+
   it("busca la casa sin distinguir mayúsculas", () => {
     expect(oddFor({ Bet365: 1.54, "1xBet": 1.48 }, "1XBET")).toBe(1.48);
     expect(oddFor({ Bet365: 1.54 }, "Caliente")).toBeNull();

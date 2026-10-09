@@ -57,7 +57,8 @@ export function FreePicks({
           </div>
           {built.length === 0 ? (
             <EmptyState title="Hoy no hay parlay gratis">
-              Hacen falta al menos dos partidos con piernas que cumplan la configuración estándar.
+              Hacen falta al menos dos partidos con piernas que cumplan la configuración estándar y que ya cotice alguna
+              casa. Si todavía no llegan los momios, vuelve más cerca de los partidos.
             </EmptyState>
           ) : (
             <div className="parlay-list">
