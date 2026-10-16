@@ -2,6 +2,9 @@
 
 Cada apuesta es de una cuenta (core.user_bets.user_id): sólo ella la ve y la borra. El boleto guarda los momios de la casa del usuario (p. ej. Caliente, que no está en la API) y una copia
 de lo que dijo el modelo. Sólo se registra antes del primer partido. Puede mezclar NBA y fútbol.
+
+Un boleto se registra como un parlay (una apuesta con todas sus piernas) o como apuestas individuales (una apuesta de
+una pierna por cada pick, como las "sencillas" de las casas).
 """
 
 import math
@@ -27,6 +30,15 @@ class BetError(ValueError):
 class LegInput:
     pick_id: int
     odd: float
+
+
+@dataclass(frozen=True)
+class SingleInput:
+    """Una apuesta individual: un pick con su momio y su propio monto."""
+
+    pick_id: int
+    odd: float
+    stake: float
 
 
 def settle_bet(stake: float, odd: float, legs: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -70,6 +82,63 @@ def summarize_bets(bets: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _pick_rows(conn: psycopg.Connection, pick_ids: list[int]) -> dict[int, dict]:
+    rows = {
+        r["id"]: r
+        for r in conn.execute(
+            """
+            SELECT k.id, k.description, k.p_model::float AS p_model, m.starts_at, m.status
+            FROM core.picks k JOIN core.matches m ON m.id = k.match_id
+            WHERE k.id = ANY(%s)
+            """,
+            (pick_ids,),
+        )
+    }
+    if len(rows) != len(set(pick_ids)):
+        raise BetError("Alguna pierna ya no existe; recarga la página y vuelve a armar el boleto.")
+    return rows
+
+
+def _not_started(row: dict, now: datetime) -> bool:
+    return row["starts_at"] > now and row["status"] == "NS"
+
+
+def _insert_bet(
+    conn: psycopg.Connection,
+    user_id: int,
+    bookmaker: str,
+    stake: float,
+    legs: list[LegInput],
+    rows: dict[int, dict],
+    now: datetime,
+    total_odd: float | None,
+    note: str | None,
+) -> int:
+    """Inserta la apuesta y sus piernas; quien llama abre la transacción."""
+    first_start = min(rows[leg.pick_id]["starts_at"] for leg in legs)
+    odd = total_odd if total_odd is not None else math.prod(leg.odd for leg in legs)
+    probability = math.prod(rows[leg.pick_id]["p_model"] for leg in legs)
+    bet_id = conn.execute(
+        """
+        INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, note, created_at, first_start)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+        """,
+        (user_id, bookmaker.strip(), round(stake, 2), round(odd, 3), round(probability, 6), note, now, first_start),
+    ).fetchone()["id"]
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO core.user_bet_legs (bet_id, position, pick_id, description, p_model, odd)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            [
+                (bet_id, i, leg.pick_id, rows[leg.pick_id]["description"], round(rows[leg.pick_id]["p_model"], 4), round(leg.odd, 3))
+                for i, leg in enumerate(legs, 1)
+            ],
+        )
+    return bet_id
+
+
 def create_bet(
     conn: psycopg.Connection,
     user_id: int,
@@ -91,48 +160,53 @@ def create_bet(
     if any(leg.odd <= 1 for leg in legs) or (total_odd is not None and total_odd <= 1):
         raise BetError("Los momios en decimal deben ser mayores que 1.")
 
-    rows = {
-        r["id"]: r
-        for r in conn.execute(
-            """
-            SELECT k.id, k.description, k.p_model::float AS p_model, m.starts_at, m.status
-            FROM core.picks k JOIN core.matches m ON m.id = k.match_id
-            WHERE k.id = ANY(%s)
-            """,
-            ([leg.pick_id for leg in legs],),
-        )
-    }
-    if len(rows) != len(legs):
-        raise BetError("Alguna pierna ya no existe; recarga la página y vuelve a armar el boleto.")
-    first_start = min(r["starts_at"] for r in rows.values())
-    if first_start <= now or any(r["status"] != "NS" for r in rows.values()):
+    rows = _pick_rows(conn, [leg.pick_id for leg in legs])
+    if not all(_not_started(r, now) for r in rows.values()):
         raise BetError(
             "Algún partido del boleto ya empezó. Las apuestas se registran antes del primer partido "
             "para que el historial sea honesto."
         )
-
-    odd = total_odd if total_odd is not None else math.prod(leg.odd for leg in legs)
-    probability = math.prod(rows[leg.pick_id]["p_model"] for leg in legs)
     with conn.transaction():
-        bet_id = conn.execute(
-            """
-            INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, note, created_at, first_start)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
-            """,
-            (user_id, bookmaker.strip(), round(stake, 2), round(odd, 3), round(probability, 6), note, now, first_start),
-        ).fetchone()["id"]
-        with conn.cursor() as cur:
-            cur.executemany(
-                """
-                INSERT INTO core.user_bet_legs (bet_id, position, pick_id, description, p_model, odd)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                [
-                    (bet_id, i, leg.pick_id, rows[leg.pick_id]["description"], round(rows[leg.pick_id]["p_model"], 4), round(leg.odd, 3))
-                    for i, leg in enumerate(legs, 1)
-                ],
-            )
-    return bet_id
+        return _insert_bet(conn, user_id, bookmaker, stake, legs, rows, now, total_odd, note)
+
+
+def create_singles(
+    conn: psycopg.Connection,
+    user_id: int,
+    bookmaker: str,
+    singles: list[SingleInput],
+    now: datetime,
+    note: str | None = None,
+) -> list[int]:
+    """Una apuesta de una pierna por cada pick: se registran todas o ninguna.
+
+    Cada una queda independiente: se liquida con su pierna y se puede borrar hasta que empiece su propio partido.
+    """
+    if not bookmaker.strip():
+        raise BetError("Escribe el nombre de tu casa de apuestas.")
+    if not singles or len(singles) > MAX_LEGS:
+        raise BetError(f"Se registran de 1 a {MAX_LEGS} apuestas individuales a la vez.")
+    if len({s.pick_id for s in singles}) != len(singles):
+        raise BetError("El boleto tiene la misma pierna repetida.")
+    if any(s.stake <= 0 for s in singles):
+        raise BetError("El monto de cada apuesta debe ser mayor que 0.")
+    if any(s.odd <= 1 for s in singles):
+        raise BetError("Los momios en decimal deben ser mayores que 1.")
+
+    rows = _pick_rows(conn, [s.pick_id for s in singles])
+    started = [rows[s.pick_id]["description"] for s in singles if not _not_started(rows[s.pick_id], now)]
+    if started:
+        names = ", ".join(f"«{d}»" for d in started[:3]) + ("…" if len(started) > 3 else "")
+        which = f"el partido de {names}: quítala" if len(started) == 1 else f"los partidos de {len(started)} piernas ({names}): quítalas"
+        raise BetError(
+            f"Ya {'empezó' if len(started) == 1 else 'empezaron'} {which} del boleto. Cada apuesta se registra antes de su "
+            "partido para que el historial sea honesto."
+        )
+    with conn.transaction():
+        return [
+            _insert_bet(conn, user_id, bookmaker, s.stake, [LegInput(s.pick_id, s.odd)], rows, now, None, note)
+            for s in singles
+        ]
 
 
 def delete_bet(conn: psycopg.Connection, user_id: int, bet_id: int, now: datetime) -> None:

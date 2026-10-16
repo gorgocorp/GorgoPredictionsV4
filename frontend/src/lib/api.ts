@@ -402,6 +402,12 @@ export interface NewBet {
   total_odd?: number;
 }
 
+/** Apuestas individuales: una apuesta de una pierna por cada pick, cada una con su monto. */
+export interface NewSingles {
+  bookmaker: string;
+  bets: { pick_id: number; odd: number; stake: number }[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -466,6 +472,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(bet),
     }),
+  createSingles: (bets: NewSingles) => send<{ ids: number[] }>("/api/bets/singles", "POST", bets),
   deleteBet: (id: number) => request<{ deleted: number }>(`/api/bets/${id}`, { method: "DELETE" }),
   performance: (sport: SportKey, f: PerformanceFilters) => request<Performance>(`/api/performance?${toQuery({ sport, ...f })}`),
 };

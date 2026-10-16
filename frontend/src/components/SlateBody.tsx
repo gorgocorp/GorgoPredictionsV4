@@ -12,6 +12,7 @@ import { FreePicks } from "./FreePicks";
 import { LegsTable } from "./LegsTable";
 import { ParlaysSection } from "./ParlaysSection";
 import { PreferencesPanel } from "./PreferencesPanel";
+import { SinglesSection } from "./SinglesSection";
 import { EmptyState, ErrorState, Skeleton, SkeletonCards } from "./States";
 
 /** Lo que usamos de una consulta de React Query. */
@@ -65,7 +66,7 @@ function leagueCounts(games: SlateGame[]): { league: League; count: number }[] {
 }
 
 /**
- * Cuerpo común de las páginas Día (NBA y fútbol) y Jornada: partidos, parlays sugeridos, tabla de piernas,
+ * Cuerpo común de las páginas Día (NBA y fútbol) y Jornada: partidos, parlays e individuales sugeridos, tabla de piernas,
  * boleto y paneles. Cada página pone su encabezado, de dónde salen partidos y piernas, y la tarjeta y el
  * panel de bajas de su deporte. Una cuenta free ve en su lugar los parlays gratis y el resto difuminado.
  */
@@ -247,6 +248,7 @@ export function SlateBody<G extends SlateGame>({
                 wholeLabel={wholeLabel}
                 onCustomize={openPrefs}
               />
+              <SinglesSection config={config} legs={shownLegs} games={games} bookmaker={priceBook} date={slipDate} />
               <LegsTable
                 config={config}
                 legs={shownLegs}

@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { Leg, SlateGame } from "../lib/api";
 import { odds, pct, shortDay, signedPct } from "../lib/format";
 import { isAllowed, isDefault, usePreferences } from "../lib/preferences";
-import { matchupOf, slip, toSlipLeg, useSlip } from "../lib/slip";
+import { matchupOf, slip, slipMode, toSlipLeg, useSlip } from "../lib/slip";
 import type { SportConfig } from "../lib/sports";
 import { EmptyState, ResultBadge } from "./States";
 import { useToast } from "./Toast";
@@ -101,7 +101,8 @@ export function LegsTable({
     const game = games.get(leg.match_id);
     const adding = !slipIds.has(leg.id);
     slip.toggle(toSlipLeg(config, leg, game, date));
-    if (adding && inSlip.some((l) => l.matchId === leg.match_id)) {
+    // En individuales cada pierna se apuesta sola: dos del mismo partido no se multiplican.
+    if (adding && slipMode(slip.get()) === "parlay" && inSlip.some((l) => l.matchId === leg.match_id)) {
       notify("Ojo: ya tienes una pierna de ese partido en el boleto (están correlacionadas)");
     }
   };

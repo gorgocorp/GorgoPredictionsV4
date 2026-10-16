@@ -711,6 +711,29 @@ select {
   flex-wrap: wrap;
 }
 
+/* ---------------------------------------------------------------- individuales */
+.singles-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.single-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: start;
+  font-size: var(--text-sm);
+}
+.single-item + .single-item {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.single-item .leg-meta {
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* ---------------------------------------------------------------- tabla */
 .filters {
   display: flex;
@@ -812,6 +835,18 @@ table.data td.wrap {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-2);
+}
+.slip-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.slip-stake {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
 }
 .slip-mobile-bar {
   display: none;

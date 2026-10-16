@@ -11,12 +11,12 @@ herramientas del navegador. Lo que la interfaz muestra difuminado es relleno gen
 | Partidos, horarios, marcadores, bajas | ✅ | ✅ | ✅ |
 | Parlays gratis del día (máx. probabilidad de 2 y 3 piernas, configuración estándar) | ✅ | ✅ | ✅ |
 | Proyecciones del modelo de partidos sin empezar | 🔒 | ✅ | ✅ |
-| Todas las piernas, parlays de 2 a 8, máximo valor, "Personalizar" | 🔒 | ✅ | ✅ |
+| Todas las piernas, parlays de 2 a 8, máximo valor, apuestas individuales sugeridas, "Personalizar" | 🔒 | ✅ | ✅ |
 | Jornada / varios días (fútbol) | 🔒 | ✅ | ✅ |
 | Historial | ✅ (piernas de partidos sin empezar fuera de los gratis: 🔒) | ✅ | ✅ |
 | Descargar CSV del historial | 🔒 | ✅ | ✅ |
 | Rendimiento y CLV | ✅ | ✅ | ✅ |
-| Mis apuestas (cada quien las suyas) | ✅ sólo con piernas que ve | ✅ | ✅ |
+| Mis apuestas (cada quien las suyas; parlay o individuales) | ✅ sólo con piernas que ve | ✅ | ✅ |
 | Recalcular, marcar bajas | — | — | ✅ |
 | Usuarios (crear, plan, vencimiento, contraseña, desactivar) | — | — | ✅ |
 

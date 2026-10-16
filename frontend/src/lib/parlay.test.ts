@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { american } from "./format";
-import { payout, summarize } from "./parlay";
+import { payout, summarize, summarizeSingles } from "./parlay";
 
 describe("summarize", () => {
   it("multiplica probabilidades y momios", () => {
@@ -45,5 +45,29 @@ describe("payout y momios americanos", () => {
     expect(american(2.5)).toBe("+150");
     expect(american(1.5)).toBe("-200");
     expect(american(2.0)).toBe("+100");
+  });
+});
+
+describe("summarizeSingles", () => {
+  it("suma (no multiplica): cada apuesta se gana o se pierde por separado", () => {
+    const s = summarizeSingles([
+      { pModel: 0.8, odd: 1.3, stake: 100 },
+      { pModel: 0.6, odd: 2.0, stake: 50 },
+    ]);
+    expect(s.bets).toBe(2);
+    expect(s.staked).toBe(150);
+    expect(s.expectedWins).toBeCloseTo(1.4);
+    expect(s.payoutAll).toBeCloseTo(130 + 100);
+    expect(s.expectedProfit).toBeCloseTo(100 * (0.8 * 1.3 - 1) + 50 * (0.6 * 2 - 1));
+  });
+
+  it("sin momio en alguna no hay pago ni ganancia esperada", () => {
+    const s = summarizeSingles([
+      { pModel: 0.8, odd: 1.3, stake: 100 },
+      { pModel: 0.6, odd: null, stake: 50 },
+    ]);
+    expect(s.payoutAll).toBeNull();
+    expect(s.expectedProfit).toBeNull();
+    expect(s.staked).toBe(150);
   });
 });

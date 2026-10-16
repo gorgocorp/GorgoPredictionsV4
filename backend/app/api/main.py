@@ -26,7 +26,7 @@ from app.api.auth import current_viewer, full_viewer
 from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS, SHARP_BOOKMAKER
 from app.core.access import free_visible_picks, lock_legs
 from app.core.accounts import Viewer
-from app.core.bets import BetError, LegInput, create_bet, delete_bet, list_bets
+from app.core.bets import BetError, LegInput, SingleInput, create_bet, create_singles, delete_bet, list_bets
 from app.core.evidence import summarize
 from app.core.sport import Sport
 from app.core.tracking import performance_data
@@ -283,6 +283,18 @@ class BetIn(BaseModel):
     note: str | None = None
 
 
+class SingleIn(BaseModel):
+    pick_id: int
+    odd: float  # momio de la casa en decimal
+    stake: float
+
+
+class SinglesIn(BaseModel):
+    bookmaker: str
+    bets: list[SingleIn]
+    note: str | None = None
+
+
 @api.get("/api/bets")
 def bets(viewer: Viewer = Depends(current_viewer)) -> dict:
     """Las apuestas de quien inició sesión."""
@@ -290,20 +302,21 @@ def bets(viewer: Viewer = Depends(current_viewer)) -> dict:
         return list_bets(conn, viewer.id, _now(), _sports())
 
 
+def _check_plan(conn, viewer: Viewer, pick_ids: list[int], now: datetime) -> None:
+    """Una cuenta free sólo registra piernas que ve (las de los parlays gratis)."""
+    if not viewer.full and not set(pick_ids) <= free_visible_picks(conn, pick_ids, now):
+        raise HTTPException(
+            status_code=403,
+            detail="El boleto lleva piernas que no incluye tu plan o que ya no existen. Recarga la página y vuelve a armarlo.",
+        )
+
+
 @api.post("/api/bets", status_code=201)
 def register_bet(bet: BetIn, viewer: Viewer = Depends(current_viewer)) -> dict:
-    """Registra una apuesta real (puede mezclar NBA y fútbol). Sólo antes de que empiece el primer partido.
-
-    Una cuenta free sólo registra piernas que ve (las de los parlays gratis).
-    """
+    """Registra una apuesta real (puede mezclar NBA y fútbol). Sólo antes de que empiece el primer partido."""
     now = _now()
     with connect() as conn:
-        pick_ids = [leg.pick_id for leg in bet.legs]
-        if not viewer.full and not set(pick_ids) <= free_visible_picks(conn, pick_ids, now):
-            raise HTTPException(
-                status_code=403,
-                detail="El boleto lleva piernas que no incluye tu plan o que ya no existen. Recarga la página y vuelve a armarlo.",
-            )
+        _check_plan(conn, viewer, [leg.pick_id for leg in bet.legs], now)
         try:
             bet_id = create_bet(
                 conn, viewer.id, bet.bookmaker, bet.stake, [LegInput(leg.pick_id, leg.odd) for leg in bet.legs], now,
@@ -312,6 +325,21 @@ def register_bet(bet: BetIn, viewer: Viewer = Depends(current_viewer)) -> dict:
         except BetError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"id": bet_id}
+
+
+@api.post("/api/bets/singles", status_code=201)
+def register_singles(body: SinglesIn, viewer: Viewer = Depends(current_viewer)) -> dict:
+    """Registra apuestas individuales (una pierna cada una, cada una con su monto): todas o ninguna."""
+    now = _now()
+    with connect() as conn:
+        _check_plan(conn, viewer, [s.pick_id for s in body.bets], now)
+        try:
+            ids = create_singles(
+                conn, viewer.id, body.bookmaker, [SingleInput(s.pick_id, s.odd, s.stake) for s in body.bets], now, note=body.note
+            )
+        except BetError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ids": ids}
 
 
 @api.delete("/api/bets/{bet_id}")

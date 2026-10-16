@@ -74,7 +74,7 @@ Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos 
 
 API local (desde `backend/`): `../.venv/Scripts/python -m uvicorn app.api.main:app --port 8301 --reload`;
 documentación en `http://localhost:8301/api/docs`. Rutas de cada deporte en `/api/nba/*` y `/api/futbol/*`;
-comunes en `/api/meta`, `/api/bets` (boleto mixto), `/api/history[.csv]?sport=` y `/api/performance?sport=`; cuentas
+comunes en `/api/meta`, `/api/bets` (boleto mixto; `POST /api/bets/singles` registra individuales), `/api/history[.csv]?sport=` y `/api/performance?sport=`; cuentas
 en `/api/auth/*` (entrar, salir, quién soy, cambiar contraseña) y `/api/admin/users` (sólo admin). Todo lo demás
 responde 401 sin sesión.
 Si existe `frontend/dist` (`npm --prefix frontend run build`), la misma API sirve la interfaz en `http://localhost:8301`.
@@ -105,7 +105,7 @@ backend/app/
 
 ```
 frontend/src/
-├── components/      # lo común: encabezado (NBA | Fútbol), boleto mixto, piernas, parlays sugeridos, personalizar
+├── components/      # lo común: encabezado (NBA | Fútbol), boleto mixto, piernas, parlays e individuales sugeridos, personalizar
 ├── sports/
 │   ├── nba/         # config.ts (mercados, estadísticas, etiquetas), tarjeta de partido, bajas, Día
 │   └── futbol/      # config.ts, tarjeta de partido, bajas, Día y Jornada (jornada o rango de fechas)
@@ -115,8 +115,10 @@ frontend/src/
 
 - La interfaz es una sola: `/nba`, `/futbol`, `/futbol/jornada`, `/historial`, `/mis-apuestas`, `/rendimiento`,
   `/cuenta` y `/usuarios` (admin). Sin sesión, cualquier ruta muestra "Entrar".
-  El boleto acepta piernas de los dos deportes; cada deporte guarda sus preferencias (mercados, ligas, mínimos) y
-  tu casa de apuestas es común. El color de acento cambia con el deporte (naranja NBA, índigo fútbol).
+  El boleto acepta piernas de los dos deportes y se registra como parlay o como apuestas individuales (una por pierna,
+  cada una con su monto, todas o ninguna); cada deporte guarda sus preferencias (mercados, ligas, mínimos) y
+  tu casa de apuestas es común. "Apuestas individuales" sugiere la mejor pierna de cada partido por probabilidad o por
+  valor, con los mismos filtros que los parlays. El color de acento cambia con el deporte (naranja NBA, índigo fútbol).
 - Los modelos e ingestas de cada deporte se copiaron casi textuales de su proyecto (sólo cambian los imports y los
   nombres de tabla, ahora con esquema). Cómo decide cada motor: ver "Cómo decide el motor" en el README de
   [GorgoNBAParlays](../GorgoNBAParlays/README.md) y de [GorgoPredictionsV3](../GorgoPredictionsV3/README.md).

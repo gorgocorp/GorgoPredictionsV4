@@ -24,14 +24,14 @@ function Summary({ s }: { s: BetsSummary }) {
         </span>
       </div>
       <div className="card kpi">
-        <span className="stat-label">Boletos acertados</span>
+        <span className="stat-label">Apuestas acertadas</span>
         <span className="kpi-value">
           {s.won} <span className="muted small">de {decided}</span>
         </span>
         <span className="muted xs">
           {decided > 0
             ? `El modelo esperaba ${s.expected_wins.toFixed(1)}; la casa, ${s.book_expected_wins.toFixed(1)}`
-            : "Todavía no se liquida ningún boleto"}
+            : "Todavía no se liquida ninguna apuesta"}
         </span>
       </div>
       <div className="card kpi">
@@ -58,13 +58,14 @@ function BetCard({ bet }: { bet: Bet }) {
     onError: (e) => notify(e instanceof ApiError ? e.message : "No se pudo borrar"),
   });
   const sports = [...new Set(bet.legs.map((l) => SPORTS[l.sport].label))];
+  const kind = bet.legs.length === 1 ? "Individual" : `Parlay de ${bet.legs.length} piernas`;
 
   return (
-    <article className="card parlay-card" aria-label={`Apuesta de ${bet.legs.length} piernas en ${bet.bookmaker}`}>
+    <article className="card parlay-card" aria-label={`${kind} en ${bet.bookmaker}`}>
       <div className="parlay-head">
         <div>
           <h3>
-            {bet.bookmaker} · {bet.legs.length} {bet.legs.length === 1 ? "pierna" : "piernas"}
+            {bet.bookmaker} · {kind}
           </h3>
           <span className="muted xs">
             {money(bet.stake)} a {american(bet.odd)} ({bet.odd.toFixed(2)}) · {sports.join(" y ")}
@@ -185,8 +186,8 @@ export function MyBetsPage() {
             </Link>
           }
         >
-          Arma tu boleto, escribe los momios que te da tu casa (p. ej. Caliente) y pulsa “Registrar apuesta” antes de que empiece el
-          primer partido. Se liquida solo con los resultados reales (en fútbol, el marcador a 90 minutos).
+          Arma tu boleto como parlay o como apuestas individuales, escribe los momios que te da tu casa (p. ej. Caliente) y pulsa
+          “Registrar” antes de que empiecen los partidos. Se liquida solo con los resultados reales (en fútbol, el marcador a 90 minutos).
         </EmptyState>
       ) : (
         <>

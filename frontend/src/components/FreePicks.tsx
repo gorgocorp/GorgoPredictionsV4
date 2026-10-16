@@ -72,8 +72,8 @@ export function FreePicks({
 
       <section aria-label="Con suscripción">
         <Paywall title="Todo lo demás, con suscripción" placeholder={<ParlaysPlaceholder />}>
-          Parlays de 2 a 8 piernas, los de máximo valor, las {totalLegs} piernas que analizó el modelo con sus momios y
-          proyecciones, y tu propia configuración para armar los tuyos.
+          Parlays de 2 a 8 piernas, los de máximo valor, las apuestas individuales sugeridas, las {totalLegs} piernas que
+          analizó el modelo con sus momios y proyecciones, y tu propia configuración para armar los tuyos.
         </Paywall>
       </section>
     </>

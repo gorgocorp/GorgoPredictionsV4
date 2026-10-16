@@ -225,6 +225,51 @@ def test_a_bet_can_mix_sports_and_be_deleted_before_start(client):
     assert client.delete(f"/api/bets/{bet_id}").status_code == 404
 
 
+def test_singles_each_with_its_own_stake_all_or_nothing(client):
+    nba, futbol = _pick(client, "nba", "Gana local 2001"), _pick(client, "futbol", "Gana local")
+    count = lambda: len(client.get("/api/bets").json()["items"])  # noqa: E731
+    before = count()
+
+    bad = client.post("/api/bets/singles", json={"bookmaker": "Caliente", "bets": [
+        {"pick_id": nba, "odd": 1.5, "stake": 100}, {"pick_id": futbol, "odd": 1.7, "stake": 0},
+    ]})
+    assert bad.status_code == 422 and "monto" in bad.json()["detail"]
+    repeated = client.post("/api/bets/singles", json={"bookmaker": "Caliente", "bets": [
+        {"pick_id": nba, "odd": 1.5, "stake": 100}, {"pick_id": nba, "odd": 1.5, "stake": 50},
+    ]})
+    assert repeated.status_code == 422 and "repetida" in repeated.json()["detail"]
+    assert count() == before
+
+    created = client.post("/api/bets/singles", json={"bookmaker": "Caliente", "bets": [
+        {"pick_id": nba, "odd": 1.5, "stake": 100}, {"pick_id": futbol, "odd": 1.7, "stake": 40},
+    ]})
+    assert created.status_code == 201
+    ids = created.json()["ids"]
+    items = {b["id"]: b for b in client.get("/api/bets").json()["items"]}
+    assert [
+        (items[i]["stake"], items[i]["odd"], items[i]["model_probability"], [leg["pick_id"] for leg in items[i]["legs"]])
+        for i in ids
+    ] == [(100, 1.5, 0.7, [nba]), (40, 1.7, 0.62, [futbol])]
+    assert all(items[i]["can_delete"] for i in ids)
+    for i in ids:
+        assert client.delete(f"/api/bets/{i}").status_code == 200
+
+
+def test_singles_are_rejected_if_one_game_already_started(client):
+    nba, futbol = _pick(client, "nba", "Gana local 2002"), _pick(client, "futbol", "Gana local")
+    with db_conn() as conn:
+        conn.execute("UPDATE core.matches SET status = 'Q1', state = 'live' WHERE sport = 'nba' AND external_id = 2002")
+    try:
+        r = client.post("/api/bets/singles", json={"bookmaker": "Caliente", "bets": [
+            {"pick_id": nba, "odd": 1.6, "stake": 100}, {"pick_id": futbol, "odd": 1.7, "stake": 40},
+        ]})
+        assert r.status_code == 422 and "«Gana local 2002»" in r.json()["detail"]
+        assert all(leg["pick_id"] != futbol for b in client.get("/api/bets").json()["items"] for leg in b["legs"])
+    finally:
+        with db_conn() as conn:
+            conn.execute("UPDATE core.matches SET status = 'NS', state = 'scheduled' WHERE sport = 'nba' AND external_id = 2002")
+
+
 def test_history_by_sport_and_csv(client):
     everything = client.get("/api/history").json()
     # Sólo NBA tiene dos partidos (un parlay lleva una pierna por partido).
@@ -327,6 +372,8 @@ def test_free_bets_only_with_free_legs_and_each_account_sees_its_own(free, clien
     locked = {"pick_id": _pick(client, "nba", "Gana local 2002"), "odd": 1.6}
     rejected = free.post("/api/bets", json={"bookmaker": "Caliente", "stake": 50, "legs": [locked]})
     assert rejected.status_code == 403 and "plan" in rejected.json()["detail"]
+    single = free.post("/api/bets/singles", json={"bookmaker": "Caliente", "bets": [{**locked, "stake": 50}]})
+    assert single.status_code == 403
 
     legs = [{"pick_id": leg["id"], "odd": 1.5} for leg in free.get(f"/api/nba/days/{DAY}/legs").json()]
     mine = free.post("/api/bets", json={"bookmaker": "Caliente", "stake": 50, "legs": legs})

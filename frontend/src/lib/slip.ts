@@ -20,11 +20,18 @@ export interface SlipLeg {
   typedOdds?: Record<string, string>;
 }
 
+/** Cómo se apuesta el boleto: un parlay con todas las piernas o una apuesta individual por pierna. */
+export type SlipMode = "parlay" | "singles";
+
 export interface SlipState {
   legs: SlipLeg[];
+  /** Monto del parlay; en individuales, el de cada pierna que no tenga uno propio. */
   stake: number;
   /** Momio total del boleto por casa (clave en minúsculas), si la casa lo muestra distinto al producto de las piernas. */
   totalOdds?: Record<string, string>;
+  mode?: SlipMode;
+  /** Individuales: monto propio de una pierna (por pickId). */
+  stakes?: Record<number, number>;
 }
 
 /** Clave de una casa en los momios escritos: sin espacios extra ni mayúsculas. */
@@ -49,7 +56,24 @@ export function toSlipLeg(config: SportConfig, leg: Leg, game: SlateGame | undef
   };
 }
 
-const EMPTY: SlipState = { legs: [], stake: 100 };
+const EMPTY: SlipState = { legs: [], stake: 100, mode: "parlay" };
+
+/** Con una sola pierna, el boleto es una apuesta individual aunque esté en modo parlay. */
+export function slipMode(state: SlipState): SlipMode {
+  return state.legs.length === 1 ? "singles" : (state.mode ?? "parlay");
+}
+
+/** Monto de una pierna en individuales: el suyo o el general. */
+export function stakeOf(state: SlipState, pickId: number): number {
+  return state.stakes?.[pickId] ?? state.stake;
+}
+
+function parseStakes(raw: unknown): Record<number, number> {
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(raw).filter(([id, v]) => Number.isInteger(Number(id)) && typeof v === "number" && Number.isFinite(v) && v >= 0),
+  );
+}
 
 /** Boleto guardado en el navegador; descarta piernas incompletas (p. ej. de otra versión). */
 export function parseSlip(raw: unknown): SlipState | null {
@@ -58,7 +82,13 @@ export function parseSlip(raw: unknown): SlipState | null {
   const legs = parsed.legs.filter(
     (l) => l && Number.isInteger(l.pickId) && Number.isInteger(l.matchId) && asSport(l.sport) !== null && typeof l.description === "string",
   );
-  return { legs, stake: Number(parsed.stake) || EMPTY.stake, totalOdds: parsed.totalOdds ?? {} };
+  return {
+    legs,
+    stake: Number(parsed.stake) || EMPTY.stake,
+    totalOdds: parsed.totalOdds ?? {},
+    mode: parsed.mode === "singles" ? "singles" : "parlay",
+    stakes: parseStakes(parsed.stakes),
+  };
 }
 
 const store = persistentStore<SlipState>("gorgo-v4.slip.v1", EMPTY, parseSlip);
@@ -70,17 +100,30 @@ export const slip = {
     if (!slip.has(leg.pickId)) store.set({ ...store.get(), legs: [...store.get().legs, leg] });
   },
   remove(pickId: number) {
-    store.set({ ...store.get(), legs: store.get().legs.filter((l) => l.pickId !== pickId) });
+    const stakes = Object.fromEntries(Object.entries(store.get().stakes ?? {}).filter(([id]) => Number(id) !== pickId));
+    store.set({ ...store.get(), legs: store.get().legs.filter((l) => l.pickId !== pickId), stakes });
   },
   toggle(leg: SlipLeg) {
     if (slip.has(leg.pickId)) slip.remove(leg.pickId);
     else slip.add(leg);
   },
-  replace(legs: SlipLeg[]) {
-    store.set({ ...store.get(), legs, totalOdds: {} });
+  /** Cambia las piernas del boleto (p. ej. un parlay sugerido o las individuales sugeridas). */
+  replace(legs: SlipLeg[], mode: SlipMode = "parlay") {
+    store.set({ ...store.get(), legs, totalOdds: {}, mode, stakes: {} });
+  },
+  setMode(mode: SlipMode) {
+    store.set({ ...store.get(), mode });
   },
   setStake(stake: number) {
     store.set({ ...store.get(), stake });
+  },
+  /** Individuales: el mismo monto para todas las piernas (quita los montos propios). */
+  setAllStakes(stake: number) {
+    store.set({ ...store.get(), stake, stakes: {} });
+  },
+  /** Individuales: monto propio de una pierna. */
+  setLegStake(pickId: number, stake: number) {
+    store.set({ ...store.get(), stakes: { ...store.get().stakes, [pickId]: stake } });
   },
   restore(previous: SlipState) {
     store.set(previous);
@@ -97,7 +140,7 @@ export const slip = {
     store.set({ ...store.get(), totalOdds: { ...store.get().totalOdds, [bookKey(book)]: value } });
   },
   clear() {
-    store.set({ ...store.get(), legs: [], totalOdds: {} });
+    store.set({ ...store.get(), legs: [], totalOdds: {}, stakes: {} });
   },
 };
 
