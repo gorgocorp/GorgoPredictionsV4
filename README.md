@@ -138,7 +138,8 @@ Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían 
 (3,010 piernas y 4 parlays de NBA; 1,330 piernas y 10 parlays de fútbol, sin una sola diferencia).
 
 Esto vale para los modelos `v1`. Desde fútbol `v2` (identidad de árbitros), las tarjetas difieren a propósito del
-proyecto anterior; ver [Cambios a los modelos](docs/MODELOS.md).
+proyecto anterior, y desde `v3` (titulares según la alineación y remates con bloqueados), las props de jugador; ver
+[Cambios a los modelos](docs/MODELOS.md).
 
 ## Momios de publicación, cierre y CLV
 

@@ -29,18 +29,29 @@ LEFT JOIN futbol.fixture_team_stats aws ON aws.fixture_id = f.id AND aws.team_id
 """
 
 # Una fila por jugador convocado y partido terminado (minutes = 0: suplente que no entró).
+# Suplente = marca de la API o banca en la alineación publicada: desde mediados de 2026 la API marca
+# substitute = false a todo el que juega, también al que entra de cambio; la alineación no cambió.
+# team_shots: "Total Shots" de su equipo en ese partido (ver History.__post_init__).
 PLAYER_STATS_SQL = """
 SELECT p.fixture_id, p.player_id, p.team_id, f.match_date, f.league_id,
        CASE WHEN p.team_id = f.home_team_id THEN f.away_team_id ELSE f.home_team_id END AS opponent_id,
        p.team_id = f.home_team_id AS is_home,
-       COALESCE(p.minutes, 0) AS minutes, p.position, COALESCE(p.is_substitute, false) AS is_substitute,
+       COALESCE(p.minutes, 0) AS minutes, p.position,
+       COALESCE(p.is_substitute, false) OR COALESCE(NOT lu.is_starter, false) AS is_substitute,
        COALESCE(p.goals, 0) AS goals, COALESCE(p.assists, 0) AS assists,
        COALESCE(p.shots_total, 0) AS shots, COALESCE(p.shots_on, 0) AS shots_on,
-       COALESCE(p.yellow, 0) + COALESCE(p.red, 0) AS cards
+       COALESCE(p.yellow, 0) + COALESCE(p.red, 0) AS cards,
+       ts.shots_total AS team_shots
 FROM futbol.fixture_player_stats p
 JOIN futbol.v_fixtures f ON f.id = p.fixture_id
+LEFT JOIN futbol.fixture_lineups lu ON lu.fixture_id = p.fixture_id AND lu.player_id = p.player_id
+LEFT JOIN futbol.fixture_team_stats ts ON ts.fixture_id = p.fixture_id AND ts.team_id = p.team_id
 WHERE f.is_finished
 """
+
+# Tope del factor que lleva los remates de los jugadores al total de su equipo (99% de los partidos con la
+# definición vieja quedan por debajo de 2.6; más arriba suele faltar algún jugador en las estadísticas).
+SHOTS_FACTOR_MAX = 3.0
 
 
 def _frame(conn: psycopg.Connection, query: str) -> pd.DataFrame:
@@ -84,6 +95,20 @@ class History:
             for col in ("minutes", "goals", "assists", "shots", "shots_on", "cards"):
                 ps[col] = pd.to_numeric(ps[col]).astype(float)
             ps["ga"] = ps["goals"] + ps["assists"]
+
+            # API-Football cambió durante 2026 (casi todo desde septiembre), partido por partido y no en una fecha,
+            # el "Total Shots" del jugador: antes era a puerta + fuera; ahora suma también los bloqueados, como el del
+            # equipo. Las props se liquidan con el dato nuevo, así que para las tasas (`shots_model`) los remates de
+            # cada jugador se escalan para que los de su equipo sumen el total del equipo: ~1.36 con la definición
+            # vieja, 1 con la nueva. `shots` queda crudo para los resultados y "veces que lo logró".
+            if "team_shots" in ps:
+                team = pd.to_numeric(ps["team_shots"], errors="coerce").astype(float)
+                players = ps.groupby(["fixture_id", "team_id"])["shots"].transform("sum")
+                factor = (team / players.where(players > 0)).clip(1.0, SHOTS_FACTOR_MAX).fillna(1.0)
+            else:
+                factor = pd.Series(1.0, index=ps.index)
+            ps["shots_factor"] = factor
+            ps["shots_model"] = ps["shots"] * factor
             ps.sort_values("match_date", inplace=True)
             ps.reset_index(drop=True, inplace=True)
 

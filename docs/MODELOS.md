@@ -4,6 +4,95 @@ Registro de los cambios intencionales al cálculo de probabilidades. Cada uno su
 (`app/sports/<deporte>/engine/tracking.py`), que se guarda en cada pick, parlay y proyección para separar el
 rendimiento de cada versión. `v1` es el motor copiado de los proyectos anteriores (paridad del 6-oct-2026).
 
+## Fútbol v3 — titulares según la alineación y remates con bloqueados (16-oct-2026)
+
+**Qué pasó.** En la revisión del 13-oct, las props de remates de jugador salían 8 a 10 puntos por debajo de lo real
+(más de 0.5: 50.5% predicho contra 58.3% real). API-Football cambió dos cosas de sus estadísticas de jugador. No lo
+hizo en una fecha: lo fue haciendo partido por partido entre enero y octubre de 2026, casi todo desde septiembre.
+
+1. **Remates ("Total Shots" del jugador).** Antes contaba a puerta + fuera. Ahora suma también los bloqueados,
+   igual que el total del equipo. Se distingue en cada (partido, equipo) con el desglose del equipo en
+   `raw_payload`. Del 1-ene-2024 al 14-oct-2026, en 21,000 casos los jugadores sumaban el total menos los bloqueados
+   (definición vieja) y en 587 sumaban el total exacto (nueva). En 1,632 no hubo bloqueados (las dos dan igual) y 63
+   quedan cerca de una de las dos. Ejemplo viejo: un equipo con 27 remates (5 a puerta, 11 fuera, 11 bloqueados) y
+   jugadores que sumaban 16. Hasta junio había pocos partidos nuevos (7 a 12 por mes); en agosto fueron 51 y desde el
+   21-sep son casi todos. Conviven en la misma liga y el mismo día (Liga MX, 11-oct), y al 14-oct la Superliga China
+   sigue con la vieja. Con la definición vieja, el cociente total del equipo / suma de los jugadores tiene mediana
+   1.36 (media 1.43, percentil 95 de 2.0 y 99 de 2.6). Los remates a puerta siempre cuadraron.
+2. **Marca de suplente (`games.substitute`).** En los partidos nuevos, la API marca `substitute = false` a todo el
+   que juega, también al que entra de cambio: salen 15.6 "titulares" por equipo en lugar de 11. La alineación
+   publicada (`futbol.fixture_lineups`, presente en el 100% de los partidos terminados) no cambió. Los jugadores que
+   la API marca titulares y la alineación pone en la banca eran 0 a 29 por mes hasta mayo de 2026; luego 193 en
+   julio, 258 en agosto, 893 en septiembre y 1,536 del 1 al 14 de octubre. Para la v2, esos suplentes "empezaban" el
+   partido: subía su probabilidad de ser titular (y se volvían elegibles para props) y bajaban los "minutos como
+   titular" de quien a veces entra de cambio.
+
+Las props se liquidan con el dato de la API, que ya usa la definición nueva de remates. El modelo debe predecir esa.
+
+**Qué cambió** (`engine/history.py`, `engine/player_model.py`):
+
+- Suplente = marca de la API **o** banca en la alineación. En el historial cambian 6,852 filas. El conteo de
+  titularidades del plantel para marcar bajas (`/fixtures/{id}/roster`) usa la misma regla.
+- Para las **tasas** de remates (`shots_model`), los remates de cada jugador se escalan para que los de su equipo
+  sumen el total del equipo en ese partido: factor = total del equipo / suma de los jugadores, acotado entre 1 y 3.
+  Con la definición nueva el factor es 1 y nada cambia; con la vieja, los bloqueados se reparten en proporción a lo
+  que remató cada jugador. Sin estadísticas del equipo, o si los jugadores no rematan o suman más que el equipo, el
+  factor es 1.
+- Los **resultados** (backtest y liquidación) y "veces que lo logró en sus últimos 10 y 25" siguen con el dato crudo
+  de la API. En los partidos con la definición vieja ese conteo no incluye los bloqueados; deja de pesar a medida
+  que esos partidos salen de la ventana.
+- La escala (0.97) y la dispersión (1.1) de remates no cambian. En la rejilla (escala × 0.85 a 1.05, dispersión 1.1
+  a 1.5) las mejores combinaciones empatan con la actual (log loss 0.4097 a 0.4101 contra 0.4099).
+- El backtest evalúa remates sólo donde los jugadores suman el total del equipo, es decir, con resultados de la
+  definición nueva. Antes de septiembre de 2026 eso deja casi únicamente partidos sin bloqueados (una muestra con
+  menos remates), así que los remates del backtest se leen desde el 21-sep-2026.
+
+**Backtest.** Emparejado: los mismos titulares, según la alineación, que jugaron. Cada día ajusta con lo anterior,
+sin información futura. Se corrió sobre la base real de producción en sólo lectura. Variantes: v2; sólo el arreglo
+de suplentes; v3 (suplentes + remates escalados por partido); y una alternativa descartada (suplentes + factor
+constante de 1.357 donde se detecta la definición vieja). IC de 95% por bootstrap de días.
+
+Remates, 21-sep a 14-oct-2026 (15 días; 3,297 titulares-partido con la definición nueva o sin bloqueados; escalones
+"1 o más" a "4 o más"):
+
+| | ≥1 | ≥2 | ≥3 | ≥4 | Remates por titular | Brier | Log loss |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Real | 58.7% | 31.4% | 14.7% | 6.9% | 1.171 | | |
+| v2 | 50.5% | 21.7% | 8.6% | 3.2% | 0.857 | 0.1400 | 0.4326 |
+| Sólo suplentes | 51.1% | 22.2% | 8.9% | 3.4% | 0.875 | 0.1390 | 0.4290 |
+| **v3** | 59.8% | 30.5% | 14.4% | 6.5% | 1.157 | 0.1334 | 0.4099 |
+| Factor constante | 59.3% | 30.1% | 14.1% | 6.3% | 1.142 | 0.1333 | 0.4098 |
+
+- Log loss v3 − v2: **−0.0226** (IC −0.0309 a −0.0184). Sólo suplentes − v2: −0.0036 (IC −0.0060 a −0.0024).
+  v3 − factor constante: +0.0001 (IC −0.0009 a +0.0010), un empate. Se eligió el escalado por partido porque no
+  necesita una constante ni detectar la definición.
+- Sensibilidad: del 4-sep al 14-oct, sólo partidos con la definición nueva exacta (4,544 titulares-partido): v3 − v2
+  −0.0277 (IC −0.0334 a −0.0240). Del 1 al 14-oct: −0.0226 (IC −0.0317 a −0.0183).
+- Por liga mejora en 11 de 14. Empeoran la Libertadores (20 titulares-partido), la Ligue 1 (164; +0.004) y la
+  Superliga China (30). En China sólo se evalúan sus partidos sin bloqueados, porque sigue con la definición vieja.
+- Con el código de v3, `backtest --sport futbol --start 2026-09-21 --end 2026-10-14` da en remates 10,605 piernas
+  (probabilidad entre 3% y 97%): predicho medio 34.9% contra 34.9% real, y cada franja de 10 puntos queda a 2.1
+  puntos o menos. El `backtest` de v2 en el mismo rango no se compara con éste: toma como titulares a los suplentes
+  que entraron y evalúa también los remates con la definición vieja.
+
+Demás props, 4-sep a 14-oct-2026 (11,379 titulares-partido, todos los partidos): ninguna cambia de forma
+significativa. Goles (log loss 0.1807 → 0.1806), asistencias (0.2786 → 0.2785), gol o asistencia (0.4296 → 0.4291;
+IC −0.0011 a +0.0001), remates a puerta (0.2827 → 0.2826) y tarjetas (0.4438 → 0.4437). Los minutos como titular
+pasan de 80.6 a 81.4 en promedio.
+
+**En producción** (partidos por jugar del 16 al 19-oct, 110 partidos, antes de que salgan las alineaciones):
+
+- Los jugadores elegibles para props bajan de 2,536 a 2,120. Los 416 que salen eran suplentes que la v2 tomaba por
+  titulares: su probabilidad de ser titular baja de 0.67 a 0.30.
+- En los demás, la probabilidad media de remates más de 0.5 pasa de 49.1% a 56.1%, de más de 1.5 de 20.8% a 27.4% y
+  de más de 2.5 de 8.2% a 12.6%.
+- Remates a puerta (26.4% → 25.8%) y goles (9.7% → 9.5%) casi no cambian. Bajan un poco porque ahora la
+  probabilidad de entrar de cambio pesa lo que debe mientras no hay alineación.
+
+**Paridad.** Desde v3, `parity --sport futbol` ya no da diferencia 0 en las props de jugador (todas las
+estadísticas, por la elegibilidad y los minutos) ni en los remates proyectados. Es el cambio buscado. Las piernas
+de equipo siguen idénticas.
+
 ## Fútbol v2 — un árbitro, una clave (9-oct-2026)
 
 **Qué cambió.** El modelo de tarjetas tiene un efecto por árbitro, y la clave del árbitro era su nombre sin el país

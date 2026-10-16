@@ -5,7 +5,8 @@ No hay momios históricos, así que se mide la calibración (¿lo que el modelo 
 habrían salido parlays de N piernas eligiendo la pierna más probable de cada partido.
 
 Las props se evalúan como se apostarían antes del partido con la alineación publicada: sólo
-titulares (la casa anula la apuesta si el jugador no juega).
+titulares (la casa anula la apuesta si el jugador no juega). Los remates, sólo donde el resultado
+ya usa la definición nueva de la API (los jugadores suman el total del equipo; ver history.py).
 """
 
 import math
@@ -146,6 +147,8 @@ def _player_day(result, hist, day, players: PlayerModel, goal_ratings, cards_mod
             context[key] = (goals, cards)
         team_goals, team_cards = context[key]
         for stat in STATS:
+            if stat == "shots" and row.shots_factor > 1.0:
+                continue  # resultado con la definición vieja (sin bloqueados): ya no es lo que se liquida
             proj = players.projection(row.player_id, stat, team_goals, team_cards, "starter")
             actual = getattr(row, stat)
             for k in LADDERS[stat]:
@@ -259,6 +262,8 @@ def format_report(result: BacktestResult) -> str:
         naive = f"   {m['brier_naive']:.4f} vs {m['brier_model_same']:.4f}" if "brier_naive" in m else ""
         lines.append(f"{name:<26}{m['n']:>8}{m['brier']:>9.4f}{m['logloss']:>9.4f}{naive}")
     lines.append("  (Brier: menor es mejor. 'Ingenuo' = frecuencia de la liga en el último año, o últimos 10 del jugador)")
+    lines.append("  (jugador: shots sólo cuenta partidos con la definición nueva de remates: léase desde el 21-sep-2026;")
+    lines.append("   antes casi sólo quedan partidos sin remates bloqueados)")
     lines.append("")
 
     sections = (

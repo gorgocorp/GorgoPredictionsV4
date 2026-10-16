@@ -377,9 +377,12 @@ WITH team_fx AS (
     WHERE t.team_id IN (%(home)s, %(away)s) AND f.status IN ('FT', 'AET', 'PEN') AND f.starts_at < %(starts)s
 ),
 recent AS (
-    SELECT p.player_id, p.team_id, p.minutes, p.goals, p.assists, p.is_substitute, p.position
+    -- Suplente: marca de la API o banca en la alineación (la API ya no marca a los que entran de cambio).
+    SELECT p.player_id, p.team_id, p.minutes, p.goals, p.assists, p.position,
+           COALESCE(p.is_substitute, false) OR COALESCE(NOT hl.is_starter, false) AS is_substitute
     FROM futbol.fixture_player_stats p
     JOIN team_fx x ON x.fixture_id = p.fixture_id AND x.team_id = p.team_id AND x.rn <= 6
+    LEFT JOIN futbol.fixture_lineups hl ON hl.fixture_id = p.fixture_id AND hl.player_id = p.player_id
 )
 SELECT r.team_id, pl.id AS player_id, pl.name,
        mode() WITHIN GROUP (ORDER BY r.position) AS position,

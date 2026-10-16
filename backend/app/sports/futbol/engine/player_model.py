@@ -50,10 +50,15 @@ ATTACKING = frozenset({"goals", "assists", "ga", "shots", "shots_on"})
 
 # Calibración medida en el backtest (titulares, ago-2025 a oct-2026, ~18,000 por estadística):
 # la tasa histórica sobreestima 3–7% lo que el titular produce en el partido siguiente, y los
-# remates están un poco sobredispersos (varianza = 1.1 × media).
+# remates están un poco sobredispersos (varianza = 1.1 × media). Con la definición nueva de remates
+# (fútbol v3, docs/MODELOS.md) la escala y la dispersión de remates siguen siendo las mejores.
 STAT_SCALE = {"goals": 0.93, "assists": 0.95, "ga": 0.93, "shots": 0.97, "shots_on": 0.95, "cards": 1.0}
 STAT_DISPERSION = {"goals": 1.0, "assists": 1.0, "ga": 1.0, "shots": 1.1, "shots_on": 1.1, "cards": 1.0}
 POSITIONS = ("G", "D", "M", "F")
+
+# Columna del historial de la que sale la tasa: los remates, escalados al total del equipo (history.py).
+# Los resultados y "veces que lo logró" usan siempre el dato crudo.
+RATE_COLUMNS = {"shots": "shots_model"}
 
 
 @dataclass(frozen=True)
@@ -128,7 +133,7 @@ class PlayerModel:
         w = recency_weights(self.as_of, played["match_date"], self.params.half_life_days)
         work = pd.DataFrame({"player_id": played["player_id"].to_numpy(), "w": w, "wmin": w * played["minutes"].to_numpy()})
         for s in STATS:
-            work[f"wx_{s}"] = w * played[s].to_numpy()
+            work[f"wx_{s}"] = w * played[RATE_COLUMNS.get(s, s)].to_numpy()
         agg = work.groupby("player_id").sum()
         agg["games"] = work.groupby("player_id").size()
         agg["position"] = pd.Series(self.position).reindex(agg.index).fillna("M")

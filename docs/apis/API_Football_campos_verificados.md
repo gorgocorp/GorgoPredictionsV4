@@ -78,6 +78,14 @@ no entró viene con `games.minutes: null`. Los conteos en 0 vienen `null`.
                  "cards": {"yellow": 0, "red": 0}, "fouls": {"committed": null}, "penalty": {"scored": 0}}]}
 ```
 
+Cambios observados en los datos durante 2026 (no anunciados en la documentación). Ocurrieron partido por partido,
+casi todos desde septiembre; detalle en [docs/MODELOS.md](../MODELOS.md), fútbol v3:
+
+- `shots.total` del jugador: antes era a puerta + fuera (sin `Blocked Shots`); ahora incluye los bloqueados, y los
+  jugadores de un equipo suman exactamente el `Total Shots` del equipo. `shots.on` no cambió.
+- `games.substitute`: ahora viene `false` para todo el que juega, también el que entró de cambio. La titularidad
+  confiable es la de la alineación (`startXI` / `substitutes`).
+
 ### Eventos y alineaciones
 
 - Eventos: `Goal` (`Normal Goal`, `Own Goal`, `Penalty`, `Missed Penalty`), `Card` (`Yellow Card`,
