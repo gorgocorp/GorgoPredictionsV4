@@ -91,15 +91,15 @@ export const FUTBOL: SportConfig = {
   statsTitle: "Apuestas de jugador",
   statsPrefix: "Jugador",
   matchup: (home, away) => `${shortTeam(home)} vs ${shortTeam(away)}`,
-  questionableSource: "según la API",
+  questionableSource: "según el reporte de bajas",
   playerBadge: (status) =>
     status === "questionable"
-      ? { label: "En duda", className: "badge-warn", title: "La API lo marca en duda. Si no juega, la apuesta se anula." }
+      ? { label: "En duda", className: "badge-warn", title: "El reporte de bajas lo marca en duda. Si no juega, la apuesta se anula." }
       : status === "starter"
         ? { label: "Titular", className: "badge-won", title: "Titular en la alineación confirmada" }
         : null,
   hitsTitle: "Props: veces que lo logró en sus últimos 10 y 25 partidos jugados",
   newsExamples: "baja, rotación",
   dataJobs: ["details", "fixtures"],
-  syncLines: (m) => [`Bajas (API-Football): ${relativeTime(m.last_injuries_at)}`, `${m.leagues?.length ?? 0} ligas`],
+  syncLines: (m) => [`Bajas reportadas: ${relativeTime(m.last_injuries_at)}`, `${m.leagues?.length ?? 0} ligas`],
 };

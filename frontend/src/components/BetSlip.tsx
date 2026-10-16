@@ -175,7 +175,7 @@ function SlipBody({ bookmaker, apiBooks, onClose }: { bookmaker: string; apiBook
           )}{" "}
           Luego
           escribe los momios que te da {myBook || "tu casa"} para compararlos con el modelo y registrar tu apuesta. Si apuestas en{" "}
-          {autoBooks}, sus momios se llenan solos desde la API.
+          {autoBooks}, sus momios se llenan solos.
         </p>
       ) : (
         <>

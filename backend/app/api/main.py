@@ -2,7 +2,7 @@
 
 - /api/nba/* y /api/futbol/*: lo propio de cada deporte (día, piernas, plantel, bajas, jornadas).
 - /api/meta, /api/bets, /api/history, /api/performance: lo común (un boleto puede mezclar deportes).
-- /api/auth/*: entrar y salir; /api/admin/*: cuentas (sólo admin).
+- /api/auth/*: entrar y salir; /api/admin/*: cuentas (sólo admin); /api/logos/*: logos sin la URL del proveedor.
 Todo lo demás pide sesión; lo que ve cada plan lo decide app/core/access.py. Lee lo que registra el scheduler y
 permite recalcular un día (sólo admin). Si STATIC_DIR apunta a la interfaz compilada, también la sirve (una sola
 app en Docker; la interfaz se sirve sin sesión para poder mostrar la pantalla de entrar).
@@ -21,7 +21,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app.api import admin, auth
+from app.api import admin, auth, logos
 from app.api.auth import current_viewer, full_viewer
 from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS, SHARP_BOOKMAKER
 from app.core.access import free_visible_picks, lock_legs
@@ -41,6 +41,7 @@ app = FastAPI(title="GorgoPredictions V4", docs_url="/api/docs", openapi_url="/a
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(logos.router, dependencies=[Depends(current_viewer)])
 for module in SPORT_APIS.values():
     app.include_router(module.router, dependencies=[Depends(current_viewer)])
 

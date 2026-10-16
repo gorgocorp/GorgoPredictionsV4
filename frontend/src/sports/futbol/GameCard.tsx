@@ -83,7 +83,7 @@ export function GameCard({ game, selected, onSelect, onAbsences }: GameCardProps
             </span>
           )}
           {!game.has_odds && game.status === "NS" && (
-            <span className="badge badge-neutral" title="La API todavía no publica momios de este partido (llegan de 1 a 14 días antes)">
+            <span className="badge badge-neutral" title="Las casas todavía no publican momios de este partido (llegan de 1 a 14 días antes)">
               Sin momios
             </span>
           )}

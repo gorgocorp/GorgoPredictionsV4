@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.api.auth import admin_viewer, current_viewer
+from app.api.logos import logo_path
 from app.api.parlays import group_parlays
 from app.api.refresh import refresh_days
 from app.config import LOCAL_TZ
@@ -31,7 +32,7 @@ def meta(conn: psycopg.Connection) -> dict:
     """Estado de la sincronización de NBA (para el encabezado)."""
     runs = conn.execute(
         """
-        SELECT DISTINCT ON (job) job, status, started_at, finished_at, error
+        SELECT DISTINCT ON (job) job, status, started_at, finished_at
         FROM core.ingest_runs WHERE sport = 'nba' ORDER BY job, started_at DESC
         """
     ).fetchall()
@@ -47,7 +48,7 @@ def meta(conn: psycopg.Connection) -> dict:
         "key": SPORT.key,
         "label": SPORT.label,
         "model_version": SPORT.model_version,
-        "sync": {r["job"]: {k: r[k] for k in ("status", "started_at", "finished_at", "error")} for r in runs},
+        "sync": {r["job"]: {k: r[k] for k in ("status", "started_at", "finished_at")} for r in runs},
         "last_odds_at": last["odds_at"],
         "last_picks_at": last["picks_at"],
         "last_settled_at": last["settled_at"],
@@ -142,7 +143,8 @@ WHERE l.game_date = %s
 
 
 def _team(row: dict, side: str) -> dict:
-    return {"id": row[f"{side}_team_id"], "name": row[f"{side}_name"], "logo": row[f"{side}_logo"]}
+    team_id = row[f"{side}_team_id"]
+    return {"id": team_id, "name": row[f"{side}_name"], "logo": logo_path("nba", "teams", team_id, row[f"{side}_logo"])}
 
 
 @router.get("/days/{day}")

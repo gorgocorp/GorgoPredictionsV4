@@ -3,12 +3,14 @@
 import os
 from datetime import date, datetime, timedelta, timezone
 
+import httpx
 import psycopg
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 
+from app.api import logos
 from app.config import LOCAL_TZ
 from app.core.accounts import create_user, find_user, set_password
 from app.core.tracking import record_picks
@@ -239,6 +241,34 @@ def test_performance_requires_a_known_sport(client):
     assert client.get("/api/performance", params={"sport": "nba"}).json()["legs"] == {"settled": 0, "void": 0, "won": 0}
     assert client.get("/api/performance", params={"sport": "futbol", "league": 262}).json()["filters"] == {"league": 262}
     assert client.get("/api/performance", params={"sport": "tenis"}).status_code == 404
+
+
+def test_logos_go_through_our_api_not_the_provider_url(client, app_db, monkeypatch):
+    with db_conn() as conn:
+        conn.execute("UPDATE futbol.teams SET logo = 'https://proveedor.example/teams/132.png' WHERE id = 132")
+        conn.execute("UPDATE futbol.leagues SET logo = 'https://proveedor.example/leagues/262.png' WHERE id = 262")
+    game = client.get(f"/api/futbol/days/{DAY}").json()["games"][0]
+    assert (game["home"]["logo"], game["away"]["logo"]) == ("/api/logos/futbol/teams/132", None)
+    assert game["league"]["logo"] == "/api/logos/futbol/leagues/262"
+    assert client.get("/api/meta").json()["sports"]["futbol"]["leagues"][0]["logo"] == "/api/logos/futbol/leagues/262"
+
+    fetched = []
+
+    def fake_get(url, **kwargs):
+        fetched.append(url)
+        content_type = "text/html" if "leagues" in url else "image/png"
+        return httpx.Response(200, content=b"png", headers={"content-type": content_type}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(logos.httpx, "get", fake_get)
+    monkeypatch.setattr(logos, "_cache", {})
+    for _ in range(2):
+        r = client.get("/api/logos/futbol/teams/132")
+        assert r.status_code == 200 and r.content == b"png" and r.headers["content-type"] == "image/png"
+    assert fetched == ["https://proveedor.example/teams/132.png"]  # la segunda vez sale de memoria
+    assert client.get("/api/logos/futbol/leagues/262").status_code == 502  # lo que no es imagen no se sirve
+    assert client.get("/api/logos/futbol/teams/133").status_code == 404  # sin logo
+    assert client.get("/api/logos/futbol/players/132").status_code == 404
+    assert TestClient(app_db).get("/api/logos/futbol/teams/132").status_code == 401
 
 
 # ---------------------------------------------------------------- plan free

@@ -56,7 +56,7 @@ function dataJob(sport: SportKey, m: SportMeta) {
 
 function SyncStatus({ sport }: { sport: SportKey }) {
   const { data, isError } = useQuery({ queryKey: ["meta"], queryFn: api.meta, refetchInterval: 60_000 });
-  if (isError) return <span className="badge badge-lost">Sin conexión con la API</span>;
+  if (isError) return <span className="badge badge-lost">Sin conexión con el servidor</span>;
   if (!data) return null;
 
   const failed = SPORT_KEYS.flatMap((k) =>

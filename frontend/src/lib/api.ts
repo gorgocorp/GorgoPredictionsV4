@@ -50,6 +50,7 @@ export interface NewUser {
 export interface Team {
   id: number;
   name: string;
+  /** Ruta propia del logo (/api/logos/...), nunca la URL del proveedor. */
   logo: string | null;
 }
 
@@ -57,6 +58,7 @@ export interface League {
   id: number;
   name: string;
   country: string | null;
+  /** Ruta propia del logo (/api/logos/...), nunca la URL del proveedor. */
   logo: string | null;
   current_season?: number | null;
 }
@@ -149,7 +151,6 @@ export interface SyncJob {
   status: "running" | "success" | "failed";
   started_at: string;
   finished_at: string | null;
-  error: string | null;
 }
 
 export interface SportMeta {

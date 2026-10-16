@@ -43,7 +43,7 @@ function PlayerRow({
           ? `${player.name}: marcado como baja (sin sus props). Picks y parlays recalculados.`
           : choice === "available"
             ? `${player.name}: marcado como disponible. Recalculado.`
-            : `${player.name}: se usa lo que diga la API. Recalculado.`,
+            : `${player.name}: se usa el reporte de bajas. Recalculado.`,
       );
       invalidateSport(queryClient, "futbol");
     },
@@ -52,7 +52,7 @@ function PlayerRow({
 
   const current = choiceOf(player);
   const options: { value: Choice; label: string }[] = [
-    { value: "report", label: player.report_status ? "API" : "Normal" },
+    { value: "report", label: player.report_status ? "Reporte" : "Normal" },
     { value: "available", label: "Juega" },
     { value: "out", label: "Baja" },
   ];
@@ -147,7 +147,7 @@ export function AvailabilityPanel({ game, onClose }: { game: Game | null; onClos
           <div className="banner banner-info">
             <span aria-hidden="true">i</span>
             <span>
-              Bajas y dudas según API-Football (lesiones, suspensiones; se actualiza cada pocas horas y no todas las ligas lo
+              Bajas y dudas reportadas (lesiones, suspensiones; se actualiza cada pocas horas y no todas las ligas lo
               publican). Marcar a alguien como baja quita sus props. Los goles esperados no se ajustan por bajas: en el
               backtest hacerlo empeoró el pronóstico (los ratings ya reflejan las ausencias largas).
               {roster.data?.lineups && " Ya hay alineaciones confirmadas: mandan sobre esta lista."}
@@ -190,7 +190,7 @@ export function AvailabilityPanel({ game, onClose }: { game: Game | null; onClos
                   )}
                   {others.length > 0 && (
                     <p className="muted xs">
-                      También en la lista de la API (sin partidos recientes):{" "}
+                      También en el reporte de bajas (sin partidos recientes):{" "}
                       {others.map((u) => `${u.name} (${AVAILABILITY_LABELS[u.status].toLowerCase()}${u.reason ? `, ${u.reason}` : ""})`).join(", ")}.
                     </p>
                   )}

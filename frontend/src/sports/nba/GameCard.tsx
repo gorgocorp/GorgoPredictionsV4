@@ -78,7 +78,7 @@ export function GameCard({ game, selected, onSelect, onAbsences }: GameCardProps
       <div className="game-top">
         <StatusBadge game={game} />
         {!game.has_odds && game.status === "NS" && (
-          <span className="badge badge-neutral" title="La API todavía no publica momios de este partido">
+          <span className="badge badge-neutral" title="Las casas todavía no publican momios de este partido">
             Sin momios
           </span>
         )}
