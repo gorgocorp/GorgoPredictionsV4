@@ -55,7 +55,7 @@ def app_db():
         nba_2002 = card("nba", 2002, FUTURE.isoformat(), [
             (NbaLeg("ml", "home"), "Gana local 2002", 0.66, 1.6),
             (NbaLeg("ml", "away"), "Gana visitante 2002", 0.34, 2.4),
-            (NbaLeg("total", "over", 220.5), "Más de 220.5 (2002)", 0.7, None, {"1xBet": 1.3}),
+            (NbaLeg("total", "over", 220.5), "Más de 220.5 (2002)", 0.7, None, {"1xBet": 1.3}, 0.68),
         ])
         record_picks(conn, with_engine("nba", [nba_legs(2001, FUTURE.isoformat()), nba_2002]), None, DAY, "Bet365", now=now)
         record_picks(
@@ -324,6 +324,9 @@ def test_free_sees_only_the_free_parlays_and_their_legs(free, client):
     assert [(p["mode"], p["n_legs"]) for p in nba["parlays"]] == [("prob", 2)]
     free_legs = [leg["description"] for leg in nba["parlays"][0]["legs"]]
     assert sorted(free_legs) == ["Gana local 2001", "Más de 220.5 (2002)"]
+    # Se promete la menor entre modelo y mercado de cada pierna (local 2001: 70% y 72%; más de 220.5: 70% y 68%).
+    assert [(leg["p_model"], leg["p_market"]) for leg in nba["parlays"][0]["legs"]] == [(0.7, 0.72), (0.7, 0.68)]
+    assert nba["parlays"][0]["probability"] == pytest.approx(0.7 * 0.68)
     # Los partidos sí; la proyección del modelo, no (sólo el aviso de que existe).
     assert [g["picks_count"] for g in nba["games"]] == [3, 3]
     assert (nba["games"][0]["projection"], nba["games"][0]["projection_locked"]) == (None, True)

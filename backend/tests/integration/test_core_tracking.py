@@ -45,21 +45,25 @@ def with_engine(sport_key: str, cards: list[Card]):
 
 
 def card(sport: str, match: int, starts: str, legs: list[tuple]) -> Card:
-    """Cada pierna: (spec, descripción, p, momio de la casa del sistema[, momios de las casas de la lista])."""
+    """Cada pierna: (spec, descripción, p, momio de la casa del sistema[, momios de las casas de la lista[, prob. del
+    mercado]])."""
     return Card(
         match,
         pd.Timestamp(starts),
         [
-            Candidate(sport, match, "A vs B", spec, desc, p, odd=odd, book_odds=books[0] if books else {})
-            for spec, desc, p, odd, *books in legs
+            Candidate(
+                sport, match, "A vs B", spec, desc, p, odd=odd, book_odds=(extra[0] if extra else None) or {},
+                p_market=extra[1] if len(extra) > 1 else None,
+            )
+            for spec, desc, p, odd, *extra in legs
         ],
     )
 
 
-def nba_legs(match: int, starts: str, p_home: float = 0.7) -> Card:
+def nba_legs(match: int, starts: str, p_home: float = 0.7, market_home: float = 0.72) -> Card:
     return card("nba", match, starts, [
-        (NbaLeg("ml", "home"), f"Gana local {match}", p_home, 1.5),
-        (NbaLeg("ml", "away"), f"Gana visitante {match}", 1 - p_home, 2.6),
+        (NbaLeg("ml", "home"), f"Gana local {match}", p_home, 1.5, None, market_home),
+        (NbaLeg("ml", "away"), f"Gana visitante {match}", 1 - p_home, 2.6, None, 1 - market_home),
         (NbaLeg("total", "over", 220.5), f"Más de 220.5 ({match})", 0.65, None),
     ])
 
@@ -96,6 +100,43 @@ def test_records_picks_and_parlays_and_freezes_started_parlays(db):
         """
     ).fetchone()["p"]
     assert p_first == 0.7
+
+
+def test_prob_parlay_picks_with_the_model_and_records_the_lower_of_model_and_market(db):
+    add_nba_game(db, 1001, starts=EARLY)
+    add_nba_game(db, 1002, starts=LATE, home=134, away=135)
+    sport = with_engine("nba", [
+        nba_legs(1001, EARLY, p_home=0.8, market_home=0.7),  # el modelo es más optimista que el mercado
+        nba_legs(1002, LATE, p_home=0.75, market_home=0.78),
+    ])
+    record_picks(db, sport, None, DAY, "Bet365", now=BEFORE)
+
+    parlays = db.execute(
+        """
+        SELECT p.mode, p.probability::float AS probability,
+               array_agg(l.p_model::float ORDER BY l.position) AS p_model,
+               array_agg(l.p_market::float ORDER BY l.position) AS p_market
+        FROM core.parlays p JOIN core.parlay_legs l ON l.parlay_id = p.id
+        WHERE p.sport = 'nba' AND p.day = %s GROUP BY p.id ORDER BY p.mode
+        """,
+        (DAY,),
+    ).fetchall()
+    ev, prob = parlays
+    # Máxima probabilidad: mismas piernas (las que más ve el modelo), se promete la menor de cada una.
+    assert prob["p_model"] == [0.8, 0.75] and prob["p_market"] == [0.7, 0.78]
+    assert prob["probability"] == pytest.approx(0.7 * 0.75)
+    # Máximo valor promete el modelo y no guarda el mercado.
+    assert ev["p_model"] == [0.8, 0.75] and ev["p_market"] == [None, None]
+    assert ev["probability"] == pytest.approx(0.8 * 0.75)
+
+
+def test_prob_parlay_needs_the_market_probability(db):
+    add_nba_game(db, 1001, starts=EARLY)
+    add_nba_game(db, 1002, starts=LATE, home=134, away=135)
+    sport = with_engine("nba", [nba_legs(1001, EARLY), card("nba", 1002, LATE, [(NbaLeg("ml", "home"), "Gana local 1002", 0.8, 1.4)])])
+    counts = record_picks(db, sport, None, DAY, "Bet365", now=BEFORE)
+    assert counts["parlays"] == 1  # sólo el de máximo valor: el local de 1002 no tiene probabilidad del mercado
+    assert [r["mode"] for r in db.execute("SELECT mode FROM core.parlays WHERE sport = 'nba'")] == ["ev"]
 
 
 def test_settles_both_sports_and_a_mixed_bet(db):

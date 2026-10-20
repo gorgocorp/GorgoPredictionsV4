@@ -213,8 +213,8 @@ def test_describe_in_spanish():
 # ---------------------------------------------------------------- parlays
 
 
-def _cand(fixture_id, p, odd=None):
-    return Candidate("futbol", fixture_id, "A vs B", LegSpec("1x2", "home"), f"f{fixture_id}", p, odd=odd)
+def _cand(fixture_id, p, odd=None, p_market=None):
+    return Candidate("futbol", fixture_id, "A vs B", LegSpec("1x2", "home"), f"f{fixture_id}", p, odd=odd, p_market=p_market)
 
 
 def test_build_parlay_one_leg_per_fixture_and_best_first():
@@ -243,14 +243,39 @@ def test_build_parlay_skips_questionable_players_by_default():
 
 def test_standard_prob_mode_only_uses_legs_some_book_prices():
     _, filters = MODES["prob"]
-    unlisted = _cand(1, 0.87)  # línea que no cotiza ninguna casa de la lista
-    other_book = _cand(2, 0.80)
+    unlisted = _cand(1, 0.87, p_market=0.80)  # línea que no cotiza ninguna casa de la lista
+    other_book = _cand(2, 0.80, p_market=0.78)
     other_book.book_odds = {"Pinnacle": 1.22}  # no la cotiza la casa del sistema, sí otra de la lista
-    cheap = _cand(3, 0.85)
+    cheap = _cand(3, 0.85, p_market=0.88)
     cheap.book_odds = {"1xBet": 1.07}  # la cotizan, pero casi no paga (su momio justo sí pasaría)
-    system = _cand(4, 0.70, 1.40)
+    system = _cand(4, 0.70, 1.40, p_market=0.68)
     cands = [unlisted, other_book, cheap, system]
     parlay = build_parlay(cands, 2, "prob", filters)
     assert [c.external_id for c in parlay.legs] == [2, 4]
     assert parlay.odd is None  # la casa del sistema no cotiza la pierna 2
     assert build_parlay(cands, 3, "prob", filters) is None
+
+
+def test_standard_prob_mode_picks_with_the_model_and_promises_the_lower_of_model_and_market():
+    _, filters = MODES["prob"]
+    optimistic = _cand(1, 0.88, 1.30, p_market=0.75)  # el modelo la ve más segura que el mercado
+    agreed = _cand(2, 0.80, 1.20, p_market=0.85)  # el mercado la ve más segura: se promete el modelo
+    second = _cand(2, 0.78, 1.25, p_market=0.90)  # mismo partido: gana la que el modelo ve más probable
+    no_market = _cand(3, 0.90, 1.20)  # sin probabilidad del mercado no entra
+    market_doubts = _cand(4, 0.86, 1.25, p_market=0.55)  # el mercado no llega al 60%
+    market_sure = _cand(5, 0.84, 1.20, p_market=0.95)  # el mercado pasa del tope de 92%
+    cands = [optimistic, agreed, second, no_market, market_doubts, market_sure]
+
+    parlay = build_parlay(cands, 2, "prob", filters)
+    assert parlay.legs == [optimistic, agreed]  # en el orden del modelo, aunque `agreed` prometa más
+    assert [parlay.leg_probability(c) for c in parlay.legs] == [0.75, 0.80]
+    assert parlay.probability == pytest.approx(0.75 * 0.80)
+    assert parlay.ev == pytest.approx(0.75 * 0.80 * 1.30 * 1.20 - 1)
+    assert build_parlay(cands, 3, "prob", filters) is None
+
+
+def test_ev_mode_promises_the_model():
+    _, filters = MODES["ev"]
+    cands = [_cand(1, 0.70, 1.60, p_market=0.60), _cand(2, 0.65, 1.70)]
+    parlay = build_parlay(cands, 2, "ev", filters)
+    assert parlay.probability == pytest.approx(0.70 * 0.65)

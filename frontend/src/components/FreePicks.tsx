@@ -5,11 +5,17 @@ import { Paywall, ParlaysPlaceholder } from "./Locked";
 import { ParlayCard } from "./ParlaysSection";
 import { EmptyState } from "./States";
 
-/** Parlay del sistema con sus piernas completas (las que la API manda a la cuenta). */
+/**
+ * Parlay del sistema con sus piernas completas (las que la API manda a la cuenta). Cada pierna lleva el modelo y el
+ * mercado con los que se registró: lo que se prometió y midió (las de partidos posteriores siguen cambiando).
+ */
 function toBuilt(p: SystemParlay, legs: Map<number, Leg>): BuiltParlay | null {
-  const full = p.legs.map((l) => legs.get(l.pick_id)).filter((l): l is Leg => l !== undefined);
+  const full = p.legs.flatMap((l) => {
+    const leg = legs.get(l.pick_id);
+    return leg ? [{ ...leg, p_model: l.p_model, p_market: l.p_market }] : [];
+  });
   if (full.length !== p.legs.length) return null;
-  return { n: p.n_legs, legs: full, probability: p.probability, odd: p.odd, ev: p.ev, result: p.result };
+  return { n: p.n_legs, mode: p.mode, legs: full, probability: p.probability, odd: p.odd, ev: p.ev, result: p.result };
 }
 
 /**
@@ -51,14 +57,16 @@ export function FreePicks({
               <h2 id="free-parlays-title">Parlays gratis del día</h2>
               <p className="muted small" style={{ margin: 0 }}>
                 Los de máxima probabilidad de 2 y 3 piernas con la configuración estándar: los mismos que registra y mide el
-                historial. Nunca dos piernas del mismo partido.
+                historial. De cada pierna se promete la menor entre el modelo y el mercado. Nunca dos piernas del mismo
+                partido.
               </p>
             </div>
           </div>
           {built.length === 0 ? (
             <EmptyState title="Hoy no hay parlay gratis">
-              Hacen falta al menos dos partidos con piernas que cumplan la configuración estándar y que ya cotice alguna
-              casa. Si todavía no llegan los momios, vuelve más cerca de los partidos.
+              Hacen falta al menos dos partidos con piernas que cumplan la configuración estándar, que ya cotice alguna
+              casa y que el mercado también vea probables. Si todavía no llegan los momios, vuelve más cerca de los
+              partidos.
             </EmptyState>
           ) : (
             <div className="parlay-list">

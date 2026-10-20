@@ -65,7 +65,7 @@ def format_parlay(parlay: Parlay) -> list[str]:
     lines = [f"    {head}"]
     for c in parlay.legs:
         price = f"@ {c.odd:.2f}" if c.odd else "(sin momio)"
-        lines.append(f"      - {_short(c.matchup):<27} {c.description:<44} {_pct(c.p_model):>4} {price}{_flag(c)}")
+        lines.append(f"      - {_short(c.matchup):<27} {c.description:<44} {_pct(parlay.leg_probability(c)):>4} {price}{_flag(c)}")
     return lines
 
 

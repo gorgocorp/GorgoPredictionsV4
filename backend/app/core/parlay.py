@@ -2,6 +2,11 @@
 
 Regla: una pierna por partido. Dos piernas del mismo partido están correlacionadas ("Boston gana" y
 "Tatum 30+", "Gana el América" y "Más de 2.5 goles") y multiplicar sus probabilidades sería engañoso.
+
+Máxima probabilidad escoge con el modelo y promete la menor entre el modelo y el mercado (`market_cap`). Escoger lo
+que el modelo ve más seguro escoge justo donde es más optimista que el mercado ("maldición del optimizador"): en
+las piernas de esos parlays de fútbol del 9 al 18-oct-2026 el modelo decía 86.5%, el mercado 77.8% y acertaron
+76.5%. El mercado no se usa para escoger, así que la selección no lo infla. Detalle en docs/MODELOS.md.
 """
 
 import math
@@ -53,13 +58,22 @@ class Candidate:
         return self.p_model - self.p_market if self.p_market is not None else None
 
 
+def promised(c: Candidate, market_cap: bool) -> float:
+    """Probabilidad que se promete de la pierna: la del modelo o, con `market_cap`, la menor entre modelo y mercado."""
+    return min(c.p_model, c.p_market) if market_cap and c.p_market is not None else c.p_model
+
+
 @dataclass
 class Parlay:
     legs: list[Candidate]
+    market_cap: bool = False  # ver ParlayFilters.market_cap
+
+    def leg_probability(self, c: Candidate) -> float:
+        return promised(c, self.market_cap)
 
     @property
     def probability(self) -> float:
-        return math.prod(c.p_model for c in self.legs)
+        return math.prod(self.leg_probability(c) for c in self.legs)
 
     @property
     def odd(self) -> float | None:
@@ -86,6 +100,9 @@ class ParlayFilters:
     require_odds: bool = True  # momio de la casa del sistema
     require_listed: bool = False  # momio de alguna casa de PRICE_BOOKMAKERS (aunque no sea la del sistema)
     include_questionable: bool = False  # props de jugadores "en duda" (si no juegan, se anulan)
+    # Se promete la menor entre el modelo y el mercado sin comisión: exige p_market y que las dos estén entre
+    # min_prob y max_prob. Se sigue escogiendo con el modelo (SCORERS).
+    market_cap: bool = False
 
 
 # Configuración estándar con la que el sistema registra y mide sus parlays (la misma en los dos deportes).
@@ -93,7 +110,9 @@ class ParlayFilters:
 MODES = {
     "prob": (
         "Máxima probabilidad",
-        ParlayFilters(min_prob=0.60, max_prob=0.92, min_odd=1.15, min_ev=None, require_odds=False, require_listed=True),
+        ParlayFilters(
+            min_prob=0.60, max_prob=0.92, min_odd=1.15, min_ev=None, require_odds=False, require_listed=True, market_cap=True
+        ),
     ),
     "ev": (
         "Máximo valor (sólo piernas con EV positivo contra la casa)",
@@ -102,7 +121,7 @@ MODES = {
 }
 
 SCORERS = {
-    # Máxima probabilidad de acertar el parlay completo.
+    # Máxima probabilidad de acertar el parlay completo, según el modelo (se promete con `market_cap`).
     "prob": lambda c: c.p_model,
     # Máximo valor esperado: maximiza el producto de p·momio.
     "ev": lambda c: c.p_model * c.odd if c.odd else 0.0,
@@ -115,6 +134,8 @@ def eligible(candidates: list[Candidate], filters: ParlayFilters) -> list[Candid
         if c.player_status == "questionable" and not filters.include_questionable:
             continue
         if not (filters.min_prob <= c.p_model <= filters.max_prob):
+            continue
+        if filters.market_cap and (c.p_market is None or not filters.min_prob <= c.p_market <= filters.max_prob):
             continue
         if c.odd is None and filters.require_odds:
             continue
@@ -144,4 +165,4 @@ def build_parlay(candidates: list[Candidate], n_legs: int, mode: str, filters: P
     if len(best_by_match) < n_legs:
         return None
     legs = sorted(best_by_match.values(), key=score, reverse=True)[:n_legs]
-    return Parlay(legs)
+    return Parlay(legs, market_cap=filters.market_cap)

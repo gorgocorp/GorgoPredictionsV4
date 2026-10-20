@@ -4,6 +4,101 @@ Registro de los cambios intencionales al cálculo de probabilidades. Cada uno su
 (`app/sports/<deporte>/engine/tracking.py`), que se guarda en cada pick, parlay y proyección para separar el
 rendimiento de cada versión. `v1` es el motor copiado de los proyectos anteriores (paridad del 6-oct-2026).
 
+## Máxima probabilidad: se escoge con el modelo y se promete la menor entre modelo y mercado (19-oct-2026)
+
+No cambia ningún modelo: las piernas y su probabilidad (`p_model`) son las mismas, así que `MODEL_VERSION` no sube y
+`parity` no cambia. Cambia lo que prometen los parlays de máxima probabilidad (los gratis de 2 y 3 piernas son de
+este modo), en los dos deportes.
+
+**Qué pasó.** Esos parlays escogían las piernas que el modelo veía más probables y prometían el producto de sus
+probabilidades. Escoger el máximo de una estimación con ruido escoge justo donde la estimación es más optimista: es la
+"maldición del optimizador". En los parlays de fútbol registrados del 9 al 18-oct-2026 (desde f642d4b sólo entran
+piernas que cotiza alguna casa), 81 piernas distintas liquidadas: el modelo decía 86.5%, el mercado sin comisión al
+cierre 77.8%, y acertaron 76.5% (IC 95% de 66.2% a 84.4%). En los 70 parlays liquidados se esperaban 37.0 aciertos y
+hubo 21. Con la regla nueva, las mismas piernas habrían prometido 23.5:
+
+| Piernas | Prometido | Regla nueva (mismas piernas, mercado al cierre) | Real |
+|---:|---:|---:|---|
+| 2 | 78.9% | 62.0% | 7/10 |
+| 3 | 68.8% | 48.7% | 5/10 |
+| 4 | 59.5% | 38.3% | 3/10 |
+| 5 | 51.1% | 30.5% | 3/10 |
+| 6 | 43.7% | 24.1% | 2/10 |
+| 7 | 37.1% | 17.7% | 1/10 |
+| 8 | 31.4% | 13.4% | 0/10 |
+
+Antes del 9-oct sólo hay 2 días de fútbol (10 piernas, 9 acertadas). En NBA (pretemporada) hay 26 piernas y 21
+parlays: no alcanza para medir.
+
+**El mercado está calibrado; el modelo, no en su parte alta.** Todas las piernas de fútbol (no sólo las de parlays)
+con momio de publicación de 1.15 o más y probabilidad del mercado, del 7 al 18-oct: 10,383.
+
+| Franja | Según el modelo: n, predicho → real | Según el mercado: n, predicho → real |
+|---|---|---|
+| 60-70% | 1,192: 65.0% → 63.5% | 1,080: 64.7% → 65.1% |
+| 70-75% | 636: 72.6% → 72.0% | 617: 72.5% → 73.3% |
+| 75-80% | 547: 77.4% → 75.3% | 618: 77.5% → 77.8% |
+| 80-85% | 285: 82.3% → 77.5% | 188: 81.2% → 81.9% |
+| 85-92% | 91: 87.3% → 80.2% | — |
+
+Con la última lectura antes del partido, el modelo de 85 a 92% acertó 74.2% (97 piernas). Cuando el modelo supera al
+mercado por 5 a 10 puntos (540 piernas con el modelo entre 60 y 92%), acertaron 62.8%: el mercado decía 65.9% y el
+modelo 73.0%.
+
+**Qué cambió** (`MODES["prob"]` con `market_cap` en `app/core/parlay.py`; lo mismo en `frontend/src/lib/builder.ts`):
+
+- Una pierna entra si el modelo **y** el mercado sin comisión (`p_market`) están entre 60% y 92%. Antes sólo se pedía
+  el modelo. Lo demás no cambia: la cotiza alguna casa a 1.15 o más y no es de un jugador en duda.
+- Se escoge igual: de cada partido, la pierna que el modelo ve más probable, y luego los N partidos con la más
+  probable.
+- De cada pierna se promete la menor entre el modelo y el mercado, y el parlay promete el producto. El mercado no se
+  usa para escoger, así que la selección no lo infla.
+- `core.parlay_legs.p_market` guarda el mercado de cada pierna al registrar el parlay (la columna de la migración
+  0008; su comentario dice que los del día no la guardan, y eso vale para los registrados antes de este cambio).
+  Máximo valor no cambia: escoge y promete con el modelo, y deja `p_market` en NULL.
+- La interfaz muestra en cada pierna lo que se promete (con el cursor encima, el modelo y el mercado). Las apuestas
+  individuales de máxima probabilidad usan la misma lista, así que siguen la misma regla.
+
+**Backtest.** Se corrió `build_parlay` (el código de arriba) sobre la base real en sólo lectura, contra la regla
+anterior. No usa información futura: cada pierna va con su momio de publicación (`first_p_model`, `first_p_market`,
+`first_odd`). La sensibilidad usa la última lectura antes de cada partido ("cierre"). Está más cerca de cuándo se
+congela el parlay, aunque para las piernas de partidos posteriores no se tenía al congelarlo. Fútbol, 7 al 18-oct
+(12 días con publicación, 13 con cierre). IC de 95% por bootstrap de días.
+
+| Fútbol | Piernas: prometido → real | Brecha (IC) | Parlays 2-8: esperados → reales | Gratis 2-3: prometido → real |
+|---|---|---|---|---|
+| Antes, publicación | 86.3% → 83.3% (84) | +2.9 (−3.1 a +10.9) | 38.8 → 25 de 73 | 72.9% → 59.1% (22) |
+| **Nueva, publicación** | 79.1% → 83.3% | −4.3 (−9.7 a +3.6) | 25.8 → 25 | 56.1% → 59.1% |
+| Antes, cierre | 86.2% → 76.7% (90) | +9.5 (+2.4 a +17.0) | 41.9 → 25 de 78 | 73.4% → 62.5% (24) |
+| **Nueva, cierre** | 78.8% → 76.7% | +2.1 (−4.5 a +9.1) | 27.7 → 25 | 56.4% → 62.5% |
+
+- Por parlay, la brecha media (prometido − real) pasa de +19.0 puntos (IC −2.6 a +38.1) a +1.1 (IC −19.3 a +19.6)
+  con publicación, y de +21.7 (IC +4.0 a +37.8) a +3.5 (IC −14.6 a +19.3) al cierre. Por tamaño, al cierre: 2 piernas
+  79% → 63% prometido (8 de 12 acertados), 3: 68% → 50% (7/12), 4: 59% → 39% (5/12), 5: 51% → 30% (2/11), 6: 43% →
+  24% (2/11), 7: 38% → 20% (1/10), 8: 32% → 15% (0/10).
+- En fútbol escoge las mismas piernas: ninguna de las escogidas quedaba fuera por el mercado (al cierre, 1 de 90). El
+  acierto no cambia; baja lo que se promete. Ningún día se queda sin parlay gratis (0 de 12, igual que antes).
+- Alternativas descartadas. Escoger y prometer con la menor (como el parlay de la semana) sigue prometiendo de más,
+  porque al escoger con ella la selección infla también al mercado: piernas 80.7% → 73.8% (publicación) y 80.8% →
+  75.6% (cierre); parlays 28.9 → 21 y 31.0 → 25. La mezcla 50/50 de modelo y mercado tiene el mejor log loss en todas
+  las piernas de 60 a 92% (0.6006, contra 0.6023 del mercado y 0.6054 del modelo; peso óptimo del modelo 0.38, IC
+  0.00 a 0.76), pero en las escogidas promete de más: 83.1% → 78.6% y 83.1% → 74.4%.
+- NBA (pretemporada, 9 días con publicación y 10 con cierre, 23 a 31 piernas): antes 78.2% → 76.9% y con la regla
+  nueva 69.6% → 69.6% (publicación); al cierre, 80.0% → 76.7% y 67.7% → 67.7%. Días sin parlay gratis de 2 piernas:
+  con publicación, de 3 a 4 de 9; al cierre, 2 de 10 con las dos reglas. De 3 piernas: de 4 a 5 de 9, y 5 de 10 con
+  las dos. En la pretemporada el mercado de NBA no fue mejor que el modelo (log loss 0.588 contra 0.568, 514 piernas
+  de 28 partidos): hay que revisarlo con la temporada regular.
+- Los intervalos son anchos: son 11 a 13 días y las piernas del mismo día se mueven juntas (muchas son "menos de X
+  goles"). La evidencia fuerte es la de arriba: el mercado está calibrado en 10,383 piernas y el modelo no en su
+  parte alta.
+
+**El rendimiento se separa en la fecha del cambio.** Los parlays de máxima probabilidad registrados antes prometían el
+producto del modelo; los de la regla nueva, el producto de la menor. Rendimiento (`/api/performance`) agrupa por modo
+y número de piernas sin separar fechas: el predicho contra el real de máxima probabilidad se lee por separado antes
+y después del despliegue. Los de la regla nueva se reconocen porque sus piernas guardan el mercado
+(`core.parlay_legs.p_market` no nulo). Antes hubo otro corte: desde el 9-oct (f642d4b) sólo entran piernas que cotiza
+alguna casa.
+
 ## Fútbol v3 — titulares según la alineación y remates con bloqueados (16-oct-2026)
 
 **Qué pasó.** En la revisión del 13-oct, las props de remates de jugador salían 8 a 10 puntos por debajo de lo real

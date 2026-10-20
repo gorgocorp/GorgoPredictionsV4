@@ -207,7 +207,8 @@ export function PreferencesPanel({
             </label>
             <p className="muted xs" style={{ margin: 0 }}>
               Más probabilidad por pierna = parlays que pegan más seguido pero pagan menos. Sólo entran piernas que cotiza alguna
-              casa; si {bookmaker} no la cotiza, el momio mínimo se compara con el mejor de las otras.
+              casa; si {bookmaker} no la cotiza, el momio mínimo se compara con el mejor de las otras. En máxima probabilidad el
+              mercado también debe llegar a la probabilidad mínima, y de cada pierna se promete la menor de las dos.
             </p>
           </fieldset>
 

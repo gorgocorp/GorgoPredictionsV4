@@ -131,6 +131,8 @@ export interface SystemParlay {
     market: string;
     description: string;
     p_model: number;
+    /** Mercado al registrar: se promete la menor entre modelo y mercado. null: se promete el modelo. */
+    p_market: number | null;
     odd: number | null;
     result: Result;
   }[];

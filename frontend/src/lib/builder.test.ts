@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Leg, SportKey } from "./api";
-import { buildParlays, buildWhole, isEligible, parlayResult } from "./builder";
+import { buildParlays, buildWhole, isEligible, parlayResult, promised } from "./builder";
 import { defaultPreferences, isAllowed, isDefault, type Preferences } from "./preferences";
 
 let nextId = 1;
+/** Pierna de prueba; sin `p_market`, el mercado coincide con el modelo. */
 function legOf(sport: SportKey, overrides: Partial<Leg>): Leg {
+  const p_model = overrides.p_model ?? 0.7;
   return {
     id: nextId++,
     sport,
@@ -18,10 +20,10 @@ function legOf(sport: SportKey, overrides: Partial<Leg>): Leg {
     player_id: 1,
     player_name: "X",
     description: "pierna",
-    p_model: 0.7,
+    p_model,
     odd: 1.5,
     bookmaker: null,
-    p_market: null,
+    p_market: p_model,
     hits_10: null,
     games_10: null,
     hits_25: null,
@@ -117,6 +119,48 @@ describe("fútbol", () => {
 
     it("sólo los tamaños elegidos", () => {
       expect(buildParlays(legs, prefs({ sizes: [3] }), "prob").map((p) => p.n)).toEqual([3]);
+    });
+  });
+
+  describe("máxima probabilidad: escoge con el modelo y promete la menor entre modelo y mercado", () => {
+    it("exige el mercado y que también esté entre el mínimo y el tope", () => {
+      expect(isEligible(leg({ p_model: 0.8, p_market: null }), prefs(), "prob")).toBe(false);
+      expect(isEligible(leg({ p_model: 0.8, p_market: 0.55 }), prefs(), "prob")).toBe(false);
+      expect(isEligible(leg({ p_model: 0.8, p_market: 0.95 }), prefs(), "prob")).toBe(false);
+      expect(isEligible(leg({ p_model: 0.8, p_market: 0.7 }), prefs(), "prob")).toBe(true);
+      expect(isEligible(leg({ p_model: 0.8, p_market: 0.7 }), prefs({ minProb: 0.75 }), "prob")).toBe(false);
+      // Máximo valor no lo necesita.
+      expect(isEligible(leg({ p_model: 0.8, p_market: null }), prefs(), "ev")).toBe(true);
+    });
+
+    it("lo que se promete", () => {
+      expect(promised(leg({ p_model: 0.88, p_market: 0.75 }), "prob")).toBe(0.75);
+      expect(promised(leg({ p_model: 0.7, p_market: 0.8 }), "prob")).toBe(0.7);
+      expect(promised(leg({ p_model: 0.7, p_market: null }), "prob")).toBe(0.7); // parlays registrados antes del cambio
+      expect(promised(leg({ p_model: 0.88, p_market: 0.75 }), "ev")).toBe(0.88);
+    });
+
+    it("el orden es el del modelo y la probabilidad, el producto de lo prometido", () => {
+      const legs = [
+        leg({ match_id: 1, p_model: 0.88, p_market: 0.75, odd: 1.3 }),
+        leg({ match_id: 2, p_model: 0.8, p_market: 0.85, odd: 1.2 }),
+        leg({ match_id: 2, p_model: 0.78, p_market: 0.9, odd: 1.25 }), // mismo partido: el modelo la ve menos probable
+        leg({ match_id: 3, p_model: 0.9, p_market: null, odd: 1.2 }), // sin mercado no entra
+      ];
+      const [two] = buildParlays(legs, prefs({ sizes: [2] }), "prob");
+      expect(two.mode).toBe("prob");
+      expect(two.legs.map((l) => l.match_id)).toEqual([1, 2]);
+      expect(two.legs.map((l) => l.p_model)).toEqual([0.88, 0.8]);
+      expect(two.probability).toBeCloseTo(0.75 * 0.8);
+      expect(two.ev).toBeCloseTo(0.75 * 0.8 * 1.3 * 1.2 - 1);
+      expect(buildWhole(legs, prefs(), "prob")?.probability).toBeCloseTo(0.75 * 0.8);
+    });
+
+    it("máximo valor promete el modelo", () => {
+      const legs = [leg({ match_id: 1, p_model: 0.7, p_market: 0.6, odd: 1.6 }), leg({ match_id: 2, p_model: 0.65, p_market: null, odd: 1.7 })];
+      const [two] = buildParlays(legs, prefs({ sizes: [2] }), "ev");
+      expect(two.mode).toBe("ev");
+      expect(two.probability).toBeCloseTo(0.7 * 0.65);
     });
   });
 

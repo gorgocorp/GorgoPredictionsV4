@@ -96,7 +96,7 @@ PARLAYS_SQL = """
 SELECT p.id, p.mode, p.n_legs, p.probability::float AS probability, p.odd::float AS odd,
        p.result, p.settled_odd::float AS settled_odd, p.evaluated_at,
        l.position, k.id AS pick_id, m.id AS match_id, m.external_id AS game_id, k.market, l.description,
-       l.p_model::float AS p_model, l.odd::float AS leg_odd, k.result AS leg_result
+       l.p_model::float AS p_model, l.p_market::float AS p_market, l.odd::float AS leg_odd, k.result AS leg_result
 FROM core.parlays p
 JOIN core.parlay_legs l ON l.parlay_id = p.id
 JOIN core.picks k ON k.id = l.pick_id

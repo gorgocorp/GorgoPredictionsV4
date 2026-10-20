@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Leg, SlateGame } from "../lib/api";
 import { bestBookOdd } from "../lib/books";
-import { buildParlays, buildWhole, type BuiltParlay, type Mode } from "../lib/builder";
+import { buildParlays, buildWhole, promised, type BuiltParlay, type Mode } from "../lib/builder";
 import { odds, pct, signedPct } from "../lib/format";
 import { isDefault, usePreferences, type Preferences } from "../lib/preferences";
 import { matchupOf, slip, toSlipLeg } from "../lib/slip";
@@ -12,7 +12,8 @@ import { useToast } from "./Toast";
 const MODE_INFO: Record<Mode, { label: string; help: string }> = {
   prob: {
     label: "Máxima probabilidad",
-    help: "Las piernas más probables que ya cotiza alguna casa, una por partido.",
+    help:
+      "Las piernas que el modelo ve más probables y que ya cotiza alguna casa, una por partido. De cada una se promete la menor entre el modelo y el mercado.",
   },
   ev: {
     label: "Máximo valor",
@@ -51,6 +52,8 @@ export function ParlayCard({
   title?: string;
 }) {
   const notify = useToast();
+  // Máxima probabilidad promete la menor entre modelo y mercado; máximo valor, el modelo.
+  const capped = parlay.mode === "prob";
 
   const load = () => {
     const previous = slip.get();
@@ -64,7 +67,7 @@ export function ParlayCard({
       const price = l.odd ? ` @ ${l.odd.toFixed(2)}` : other ? ` @ ${other.odd.toFixed(2)} (${other.book})` : "";
       return `${i + 1}. ${matchupOf(config, games.get(l.match_id))} — ${l.description}${price}`;
     });
-    const head = `Parlay ${config.label} · ${parlay.n} piernas · prob. modelo ${pct(parlay.probability, 1)}${parlay.odd ? ` · momio ${bookmaker} ${parlay.odd.toFixed(2)}` : ""}`;
+    const head = `Parlay ${config.label} · ${parlay.n} piernas · prob.${capped ? "" : " modelo"} ${pct(parlay.probability, 1)}${parlay.odd ? ` · momio ${bookmaker} ${parlay.odd.toFixed(2)}` : ""}`;
     try {
       await navigator.clipboard.writeText([head, ...lines].join("\n"));
       notify("Parlay copiado al portapapeles");
@@ -81,8 +84,13 @@ export function ParlayCard({
       </div>
       <div className="parlay-stats">
         <div className="stat">
-          <span className="stat-label">Prob. modelo</span>
-          <span className="stat-value">{pct(parlay.probability, 1)}</span>
+          <span className="stat-label">{capped ? "Probabilidad" : "Prob. modelo"}</span>
+          <span
+            className="stat-value"
+            title={capped ? "De cada pierna se promete la menor entre el modelo y el mercado" : "Probabilidad del modelo"}
+          >
+            {pct(parlay.probability, 1)}
+          </span>
         </div>
         <div className="stat">
           <span className="stat-label">Momio justo</span>
@@ -107,7 +115,13 @@ export function ParlayCard({
                 {l.description}
               </span>
               <span className="leg-meta">
-                <span className="num">{pct(l.p_model)}</span>
+                {capped && l.p_market !== null ? (
+                  <span className="num" title={`Modelo ${pct(l.p_model)} · Mercado ${pct(l.p_market)}: se promete la menor`}>
+                    {pct(promised(l, parlay.mode))}
+                  </span>
+                ) : (
+                  <span className="num">{pct(l.p_model)}</span>
+                )}
                 <br />
                 {l.odd ? (
                   <span className="muted xs num">{odds(l.odd)}</span>

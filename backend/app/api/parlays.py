@@ -28,6 +28,8 @@ def group_parlays(rows: list[dict], match_key: str) -> list[dict]:
                 "market": r["market"],
                 "description": r["description"],
                 "p_model": r["p_model"],
+                # Mercado al registrar; con él se promete la menor de las dos (NULL: se promete el modelo).
+                "p_market": r["p_market"],
                 "odd": r["leg_odd"],
                 "result": r["leg_result"],
             }

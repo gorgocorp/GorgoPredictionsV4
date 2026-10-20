@@ -14,11 +14,22 @@ export type Mode = "prob" | "ev";
 /** Tope de probabilidad por modo: piernas casi seguras pagan demasiado poco. */
 export const MAX_PROB: Record<Mode, number> = { prob: 0.92, ev: 0.97 };
 
+/**
+ * Lo que se promete de una pierna. Máxima probabilidad escoge con el modelo pero promete la menor entre el modelo y el
+ * mercado sin comisión: escoger lo que el modelo ve más seguro escoge justo donde es más optimista que el mercado.
+ * Máximo valor promete el modelo (con él se calcula su valor esperado).
+ */
+export function promised(leg: Pick<Leg, "p_model" | "p_market">, mode: Mode): number {
+  return mode === "prob" && leg.p_market !== null ? Math.min(leg.p_model, leg.p_market) : leg.p_model;
+}
+
 export interface BuiltParlay {
   n: number;
+  mode: Mode;
   /** Parlay con una pierna de cada partido que tenga alguna elegible (p. ej. la jornada completa). */
   whole?: boolean;
   legs: Leg[];
+  /** Producto de lo que se promete de cada pierna (`promised`). */
   probability: number;
   odd: number | null;
   ev: number | null;
@@ -29,6 +40,8 @@ export function isEligible(leg: Leg, prefs: Preferences, mode: Mode): boolean {
   if (!isAllowed(leg, prefs)) return false;
   if (leg.player_status === "questionable" && !prefs.includeQuestionable) return false;
   if (leg.p_model < prefs.minProb || leg.p_model > MAX_PROB[mode]) return false;
+  // Máxima probabilidad promete la menor entre modelo y mercado: exige el mercado, también dentro del rango.
+  if (mode === "prob" && (leg.p_market === null || leg.p_market < prefs.minProb || leg.p_market > MAX_PROB.prob)) return false;
   // Sólo piernas que cotiza alguna casa (el parlay se tiene que poder apostar). Si la casa elegida no la
   // cotiza, el momio mínimo se compara con el mejor de las otras.
   const price = leg.odd ?? bestBookOdd(leg.book_odds)?.odd ?? null;
@@ -38,6 +51,7 @@ export function isEligible(leg: Leg, prefs: Preferences, mode: Mode): boolean {
 }
 
 const SCORE: Record<Mode, (l: Leg) => number> = {
+  // Se escoge con el modelo; se promete con `promised`.
   prob: (l) => l.p_model,
   ev: (l) => l.p_model * (l.odd ?? 0),
 };
@@ -63,10 +77,11 @@ export function rankedLegs(legs: Leg[], prefs: Preferences, mode: Mode): Leg[] {
 /** Tope del parlay "completo": lo más que acepta un boleto. */
 export const MAX_WHOLE_LEGS = 20;
 
-function toParlay(chosen: Leg[]): Omit<BuiltParlay, "n"> {
-  const probability = chosen.reduce((acc, l) => acc * l.p_model, 1);
+function toParlay(chosen: Leg[], mode: Mode): Omit<BuiltParlay, "n"> {
+  const probability = chosen.reduce((acc, l) => acc * promised(l, mode), 1);
   const odd = chosen.every((l) => l.odd !== null) ? chosen.reduce((acc, l) => acc * (l.odd as number), 1) : null;
   return {
+    mode,
     legs: chosen,
     probability,
     odd,
@@ -82,7 +97,7 @@ function toParlay(chosen: Leg[]): Omit<BuiltParlay, "n"> {
 export function buildWhole(legs: Leg[], prefs: Preferences, mode: Mode): BuiltParlay | null {
   const ranked = rankedLegs(legs, prefs, mode);
   if (ranked.length < 2 || ranked.length > MAX_WHOLE_LEGS) return null;
-  return { n: ranked.length, whole: true, ...toParlay(ranked) };
+  return { n: ranked.length, whole: true, ...toParlay(ranked, mode) };
 }
 
 export function buildParlays(legs: Leg[], prefs: Preferences, mode: Mode): BuiltParlay[] {
@@ -90,5 +105,5 @@ export function buildParlays(legs: Leg[], prefs: Preferences, mode: Mode): Built
   return [...prefs.sizes]
     .sort((a, b) => a - b)
     .filter((n) => ranked.length >= n)
-    .map((n) => ({ n, ...toParlay(ranked.slice(0, n)) }));
+    .map((n) => ({ n, ...toParlay(ranked.slice(0, n), mode) }));
 }

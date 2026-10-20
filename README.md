@@ -144,6 +144,19 @@ Esto vale para los modelos `v1`. Desde fútbol `v2` (identidad de árbitros), la
 proyecto anterior, y desde `v3` (titulares según la alineación y remates con bloqueados), las props de jugador; ver
 [Cambios a los modelos](docs/MODELOS.md).
 
+## Parlays del día
+
+Cada corrida arma, por deporte y día, parlays de 2 a 8 piernas (una por partido) en dos modos, y cada uno se congela
+al empezar su primer partido (`MODES` en `app/core/parlay.py`; el navegador arma los mismos con
+`frontend/src/lib/builder.ts`):
+
+- **Máxima probabilidad** (los gratis son los de 2 y 3 piernas): escoge las piernas que el modelo ve más probables
+  entre las que cotiza alguna casa a 1.15 o más y a las que el modelo **y** el mercado sin comisión dan entre 60% y
+  92%. De cada pierna promete la menor entre el modelo y el mercado: escoger lo que el modelo ve más seguro escoge
+  justo donde es más optimista. Cambio del 19-oct-2026: detalle, backtest y corte del rendimiento en
+  [Cambios a los modelos](docs/MODELOS.md).
+- **Máximo valor**: piernas con momio de Bet365 y valor esperado positivo según el modelo; promete el modelo.
+
 ## Parlays de la semana (fútbol)
 
 Página **Semana** (`/futbol/semana`), visible para todos los planes. Dos destacados de 2 a 5 piernas que se publican

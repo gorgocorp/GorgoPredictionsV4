@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Leg, SlateGame } from "../lib/api";
 import { bestBookOdd } from "../lib/books";
-import { MAX_WHOLE_LEGS, rankedLegs, type Mode } from "../lib/builder";
+import { MAX_WHOLE_LEGS, promised, rankedLegs, type Mode } from "../lib/builder";
 import { odds, pct, signedPct } from "../lib/format";
 import { usePreferences } from "../lib/preferences";
 import { matchupOf, slip, toSlipLeg, useSlip } from "../lib/slip";
@@ -16,7 +16,7 @@ const SUSPICIOUS_EDGE = 0.1;
 const MODE_INFO: Record<Mode, { label: string; help: string }> = {
   prob: {
     label: "Máxima probabilidad",
-    help: "Las piernas que el modelo ve más probables y que ya cotiza alguna casa.",
+    help: "Las piernas que el modelo ve más probables y que ya cotiza alguna casa. De cada una se promete la menor entre el modelo y el mercado.",
   },
   ev: {
     label: "Máximo valor",
@@ -49,7 +49,7 @@ export function SinglesSection({
   const ranked = byMode[mode];
   const shown = expanded ? ranked : ranked.slice(0, SHOWN);
   const toLoad = shown.slice(0, MAX_WHOLE_LEGS);
-  const expectedWins = shown.reduce((acc, l) => acc + l.p_model, 0);
+  const expectedWins = shown.reduce((acc, l) => acc + promised(l, mode), 0);
   const { legs: inSlip } = useSlip();
   const slipIds = useMemo(() => new Set(inSlip.map((l) => l.pickId)), [inSlip]);
   const notify = useToast();
@@ -108,13 +108,14 @@ export function SinglesSection({
       ) : (
         <div className="card singles-card">
           <p className="muted xs" style={{ margin: 0 }}>
-            De {shown.length === 1 ? "esta" : `estas ${shown.length}`}, el modelo espera acertar{" "}
+            De {shown.length === 1 ? "esta" : `estas ${shown.length}`}, {mode === "prob" ? "se espera" : "el modelo espera"} acertar{" "}
             <strong className="num">{expectedWins.toFixed(1)}</strong>. Cada una se gana o se pierde por separado.
           </p>
           <ol className="leg-list">
             {shown.map((l) => {
               const added = slipIds.has(l.id);
-              const ev = l.odd !== null ? l.p_model * l.odd - 1 : null;
+              const p = promised(l, mode);
+              const ev = l.odd !== null ? p * l.odd - 1 : null;
               const other = l.odd ? null : bestBookOdd(l.book_odds);
               const edge = l.p_market !== null ? l.p_model - l.p_market : null;
               const badge = l.player_status ? config.playerBadge(l.player_status) : null;
@@ -161,8 +162,15 @@ export function SinglesSection({
                     )}
                   </span>
                   <span className="leg-meta">
-                    <span className="num" title="Probabilidad del modelo">
-                      <strong>{pct(l.p_model)}</strong>
+                    <span
+                      className="num"
+                      title={
+                        mode === "prob" && l.p_market !== null
+                          ? `Modelo ${pct(l.p_model)} · Mercado ${pct(l.p_market)}: se promete la menor`
+                          : "Probabilidad del modelo"
+                      }
+                    >
+                      <strong>{pct(p)}</strong>
                     </span>
                     <br />
                     {l.odd ? (

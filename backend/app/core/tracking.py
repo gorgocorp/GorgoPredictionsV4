@@ -231,14 +231,24 @@ def _replace_parlay(
         (sport.key, day, mode, n, round(parlay.probability, 6), parlay.odd, bookmaker, sport.model_version, now),
     ).fetchone()["id"]
     with conn.cursor() as cur:
-        # Copia de la pierna tal como se predijo (las de partidos posteriores siguen cambiando en picks).
+        # Copia de la pierna tal como se predijo (las de partidos posteriores siguen cambiando en picks). El mercado
+        # se guarda sólo si el parlay promete la menor entre modelo y mercado (máxima probabilidad): así cada pierna
+        # dice qué se prometió (en máximo valor, el modelo).
         cur.executemany(
             """
-            INSERT INTO core.parlay_legs (parlay_id, pick_id, position, description, p_model, odd)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO core.parlay_legs (parlay_id, pick_id, position, description, p_model, odd, p_market)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             [
-                (parlay_id, pick_ids[(c.external_id, _spec_key(c.spec))], i, c.description, round(c.p_model, 4), c.odd)
+                (
+                    parlay_id,
+                    pick_ids[(c.external_id, _spec_key(c.spec))],
+                    i,
+                    c.description,
+                    round(c.p_model, 4),
+                    c.odd,
+                    round(c.p_market, 4) if parlay.market_cap else None,
+                )
                 for i, c in enumerate(parlay.legs, 1)
             ],
         )
