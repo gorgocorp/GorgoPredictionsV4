@@ -21,13 +21,15 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app.api import admin, auth, logos
+from app.api import admin, auth, featured, logos
 from app.api.auth import current_viewer, full_viewer
 from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS, SHARP_BOOKMAKER
 from app.core.access import free_visible_picks, lock_legs
 from app.core.accounts import Viewer
 from app.core.bets import BetError, LegInput, SingleInput, create_bet, create_singles, delete_bet, list_bets
 from app.core.evidence import summarize
+from app.core.featured import FEATURED_MODES
+from app.core.parlay import MODES
 from app.core.sport import Sport
 from app.core.tracking import performance_data
 from app.db import connect
@@ -42,6 +44,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(logos.router, dependencies=[Depends(current_viewer)])
+app.include_router(featured.router, dependencies=[Depends(current_viewer)])
 for module in SPORT_APIS.values():
     app.include_router(module.router, dependencies=[Depends(current_viewer)])
 
@@ -81,6 +84,8 @@ def meta() -> dict:
 # ---------------------------------------------------------------- historial (evidencias)
 
 RESULT_FILTERS = ("won", "lost", "void", "pending")
+# Parlays del día y destacados (de la semana y de fin de semana).
+PARLAY_MODES = (*MODES, *FEATURED_MODES)
 
 
 def _history_sql(sports: dict[str, Sport]) -> str:
@@ -111,7 +116,7 @@ def _history_sql(sports: dict[str, Sport]) -> str:
 HISTORY_LEGS_SQL = """
 SELECT l.parlay_id, l.position, k.id AS pick_id, k.match_id, m.external_id, m.competition, m.home_name, m.away_name,
        k.market, k.side, k.line::float AS line, k.team, k.stat,
-       l.description, l.p_model::float AS p_model, l.odd::float AS odd, k.result,
+       l.description, l.p_model::float AS p_model, l.p_market::float AS p_market, l.odd::float AS odd, k.result,
 {outcome_columns}
 FROM core.parlay_legs l
 JOIN core.picks k ON k.id = l.pick_id
@@ -123,8 +128,8 @@ WHERE k.sport = %s AND l.parlay_id = ANY(%s)
 def _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason) -> list[dict]:
     if sport is not None:
         _sport(sport)
-    if mode not in (None, "prob", "ev"):
-        raise HTTPException(status_code=422, detail="mode debe ser prob o ev")
+    if mode not in (None, *PARLAY_MODES):
+        raise HTTPException(status_code=422, detail=f"mode debe ser uno de {PARLAY_MODES}")
     if result not in (None, *RESULT_FILTERS):
         raise HTTPException(status_code=422, detail=f"result debe ser uno de {RESULT_FILTERS}")
     return conn.execute(
@@ -162,6 +167,8 @@ def _history_legs(conn, rows: list[dict], viewer: Viewer) -> dict[int, list[dict
                     "market": r["market"],
                     "description": r["description"],
                     "p_model": r["p_model"],
+                    # Sólo en los destacados: la del mercado al publicarse (prometen la menor de las dos).
+                    "p_market": r["p_market"],
                     "odd": r["odd"],
                     "result": r["result"],
                     "outcome": sport.leg_outcome(r),
@@ -219,7 +226,7 @@ def history(
 
 
 RESULT_ES = {"won": "ganado", "lost": "perdido", "void": "anulado", None: "pendiente"}
-MODE_ES = {"prob": "máxima probabilidad", "ev": "máximo valor"}
+MODE_ES = {"prob": "máxima probabilidad", "ev": "máximo valor", "week": "de la semana", "weekend": "de fin de semana"}
 
 
 @api.get("/api/history.csv")
@@ -245,7 +252,7 @@ def history_csv(
         "fecha", "deporte", "parlay", "modo", "piernas", "prob_parlay", "momio_parlay", "resultado_parlay",
         "momio_liquidado", "ganancia_unidades", "registrado_utc", "primer_partido_utc", "registrado_antes_del_partido",
         "pierna", "competicion", "partido", "hora_partido_utc", "mercado", "descripcion", "prob_pierna", "momio_pierna",
-        "resultado_pierna", "valor_real", "detalle_real",
+        "resultado_pierna", "valor_real", "detalle_real", "prob_mercado_pierna",
     ])
     for r in rows:
         profit = _profit(r)
@@ -259,6 +266,7 @@ def history_csv(
                 leg["starts_at"].isoformat(timespec="seconds"), leg["market"], leg["description"],
                 round(leg["p_model"], 4), leg["odd"] or "", RESULT_ES[leg["result"]],
                 "" if leg["outcome"]["value"] is None else leg["outcome"]["value"], leg["outcome"]["text"],
+                "" if leg["p_market"] is None else round(leg["p_market"], 4),
             ])
     return Response(
         out.getvalue(),

@@ -19,6 +19,7 @@ from app.api.refresh import refresh_days
 from app.config import LOCAL_TZ
 from app.core.access import gate_projection, visible_legs, visible_parlays
 from app.core.accounts import Viewer
+from app.core.parlay import MODES
 from app.db import connect
 from app.sports.futbol.matches import SCHEDULED
 from app.sports.futbol.sport import SPORT
@@ -102,6 +103,7 @@ WHERE """ + SLATE_FILTER + """
 ORDER BY f.starts_at, l.name, f.id
 """
 
+# Parlays del día (los destacados de la semana tienen su propia ruta: /api/featured).
 PARLAYS_SQL = """
 SELECT p.id, p.mode, p.n_legs, p.probability::float AS probability, p.odd::float AS odd,
        p.result, p.settled_odd::float AS settled_odd, p.evaluated_at,
@@ -111,7 +113,7 @@ FROM core.parlays p
 JOIN core.parlay_legs l ON l.parlay_id = p.id
 JOIN core.picks k ON k.id = l.pick_id
 JOIN core.matches m ON m.id = k.match_id
-WHERE p.sport = 'futbol' AND p.day = %s
+WHERE p.sport = 'futbol' AND p.day = %s AND p.mode = ANY(%s)
 ORDER BY p.mode, p.n_legs, l.position
 """
 
@@ -240,7 +242,7 @@ def _day_filter(day: date) -> dict:
 def day_view(day: date, viewer: Viewer = Depends(current_viewer)) -> dict:
     with connect() as conn:
         games = _games(conn, _day_filter(day), viewer)
-        parlay_rows = conn.execute(PARLAYS_SQL, (day,)).fetchall()
+        parlay_rows = conn.execute(PARLAYS_SQL, (day, list(MODES))).fetchall()
     parlays = visible_parlays(group_parlays(parlay_rows, "fixture_id"), viewer.full)
     return {"sport": "futbol", "date": day.isoformat(), "games": games, "parlays": parlays}
 

@@ -68,13 +68,14 @@ Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos 
 | `picks --sport X [--date D] [--bookmaker Bet365\|1xBet\|best]` | Piernas y parlays de un día (texto) |
 | `record-picks --sport X [--date D]` | Guarda piernas y parlays de un día (lo hace el scheduler) |
 | `settle [--sport X]` | Liquida piernas, parlays y tus apuestas (lo hace el scheduler) |
+| `featured [--sport X]` | Publica los parlays de la semana y de fin de semana que ya toquen (lo hace el scheduler) |
 | `performance --sport nba [--include-preseason]` · `--sport futbol [--league ID]` | Rendimiento real, con CLV |
 | `backtest --sport X [--start --end --every N --teams-only]` | Evalúa los modelos día por día |
 | `scheduler [--sport X]` | Sincroniza, liquida y registra picks periódicamente |
 
 API local (desde `backend/`): `../.venv/Scripts/python -m uvicorn app.api.main:app --port 8301 --reload`;
 documentación en `http://localhost:8301/api/docs`. Rutas de cada deporte en `/api/nba/*` y `/api/futbol/*`;
-comunes en `/api/meta`, `/api/bets` (boleto mixto; `POST /api/bets/singles` registra individuales), `/api/history[.csv]?sport=` y `/api/performance?sport=`; cuentas
+comunes en `/api/meta`, `/api/bets` (boleto mixto; `POST /api/bets/singles` registra individuales), `/api/history[.csv]?sport=`, `/api/performance?sport=` y `/api/featured?sport=futbol` (parlays de la semana); cuentas
 en `/api/auth/*` (entrar, salir, quién soy, cambiar contraseña) y `/api/admin/users` (sólo admin). Todo lo demás
 responde 401 sin sesión.
 Si existe `frontend/dist` (`npm --prefix frontend run build`), la misma API sirve la interfaz en `http://localhost:8301`.
@@ -142,6 +143,28 @@ Además, `record-picks` de V4 reprodujo lo que los proyectos anteriores habían 
 Esto vale para los modelos `v1`. Desde fútbol `v2` (identidad de árbitros), las tarjetas difieren a propósito del
 proyecto anterior, y desde `v3` (titulares según la alineación y remates con bloqueados), las props de jugador; ver
 [Cambios a los modelos](docs/MODELOS.md).
+
+## Parlays de la semana (fútbol)
+
+Página **Semana** (`/futbol/semana`), visible para todos los planes. Dos destacados de 2 a 5 piernas que se publican
+una sola vez y ya no cambian (`app/core/featured.py`; el scheduler los publica en su primera corrida desde la hora):
+
+| Destacado | Se publica | Partidos |
+|---|---|---|
+| Parlay de la semana | lunes, 8:00 (hora local) | lunes a domingo |
+| Parlay de fin de semana | jueves, 8:00 | viernes a domingo |
+
+- Cada pierna es de un partido que aún no empieza (una por partido), de un mercado de partido (sin props de jugador ni
+  marcador exacto: al publicarse nadie conoce las alineaciones), la cotiza alguna casa a **1.30 o más** (el momio de
+  Bet365 si la cotiza; si no, el mejor de las otras) sin alejarse más de 20% del precio justo, y el **modelo y el
+  mercado** sin comisión le dan al menos 60%. Se promete la menor de las dos: en las piernas de los parlays de máxima
+  probabilidad del 9 al 19-oct-2026 el modelo decía 87%, el mercado 78% y acertaron 79%. Máximo 2 piernas del mismo
+  mercado. Los tamaños se arman uno sobre otro (el de 3 es el de 2 más la siguiente pierna).
+- Viven en `core.parlays` (modos `week` y `weekend`, `day` = primer día de la ventana; migración 0008), así que se
+  liquidan, salen en Historial y en Rendimiento y llevan su contador de aciertos por tamaño. Si no hay al menos dos
+  piernas que cumplan las reglas, no se publica y se reintenta en la siguiente corrida.
+- NBA todavía no los tiene: registra picks sólo 2 días adelante y sus momios llegan ~1 día antes
+  (`featured_excluded_markets` en el contrato del deporte).
 
 ## Momios de publicación, cierre y CLV
 

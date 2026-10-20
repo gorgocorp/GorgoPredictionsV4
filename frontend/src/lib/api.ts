@@ -111,6 +111,9 @@ export interface Leg {
   book_odds: Record<string, number> | null;
 }
 
+/** Tipos de parlay que registra el sistema: los del día (máxima probabilidad y máximo valor) y los destacados. */
+export type ParlayMode = "prob" | "ev" | "week" | "weekend";
+
 /** Parlay registrado por el sistema para un día (configuración estándar). A una cuenta free sólo le llegan los gratis. */
 export interface SystemParlay {
   id: number;
@@ -190,7 +193,7 @@ export interface CalibrationBin {
 }
 
 export interface ParlayPerformance {
-  mode: "prob" | "ev";
+  mode: ParlayMode;
   n_legs: number;
   count: number;
   predicted: number;
@@ -267,6 +270,8 @@ export interface HistoryLeg {
   market: string;
   description: string;
   p_model: number;
+  /** Sólo en los destacados: probabilidad del mercado al publicarse (prometen la menor de las dos). */
+  p_market: number | null;
   odd: number | null;
   result: Result;
   outcome: { value: number | null; text: string };
@@ -286,7 +291,7 @@ export interface HistoryParlay {
   id: number;
   sport: SportKey;
   day: string;
-  mode: "prob" | "ev";
+  mode: ParlayMode;
   n_legs: number;
   probability: number;
   odd: number | null;
@@ -330,12 +335,70 @@ export interface HistoryFilters {
   sport?: SportKey;
   desde?: string;
   hasta?: string;
-  mode?: "prob" | "ev";
+  mode?: ParlayMode;
   n_legs?: number;
   result?: "won" | "lost" | "void" | "pending";
   include_preseason?: boolean;
   limit?: number;
   offset?: number;
+}
+
+/** Pierna de un parlay destacado: copia de lo que se publicó (probabilidades y momio de la casa del sistema). */
+export interface FeaturedLeg {
+  pick_id: number;
+  position: number;
+  sport: SportKey;
+  match_id: number;
+  competition: string;
+  matchup: string;
+  starts_at: string;
+  /** Día local del partido. */
+  date: string;
+  market: string;
+  description: string;
+  p_model: number;
+  /** Probabilidad sin comisión del mercado al publicarse. */
+  p_market: number | null;
+  odd: number | null;
+  /** Momios actuales de las casas de la API (para el boleto). */
+  book_odds: Record<string, number> | null;
+  result: Result;
+  outcome: { value: number | null; text: string };
+}
+
+export interface FeaturedParlay {
+  id: number;
+  mode: "week" | "weekend";
+  n_legs: number;
+  /** Lo que se promete: el producto de la menor entre modelo y mercado de cada pierna. */
+  probability: number;
+  odd: number | null;
+  result: Result;
+  settled_odd: number | null;
+  evaluated_at: string;
+  legs: FeaturedLeg[];
+}
+
+/** Un destacado de una semana: el de la semana (lunes a domingo) o el de fin de semana (viernes a domingo). */
+export interface FeaturedWindow {
+  mode: "week" | "weekend";
+  label: string;
+  start: string;
+  end: string;
+  publish_at: string;
+  /** Vacío si todavía no se publica (o si no hubo piernas que cumplieran las reglas). */
+  parlays: FeaturedParlay[];
+}
+
+export interface FeaturedResponse {
+  sport: SportKey;
+  rules: { sizes: number[]; min_odd: number; min_prob: number; max_per_market: number; publish_hour: number };
+  /** Los de esta semana, publicados o por publicar. */
+  current: FeaturedWindow[];
+  /** Semanas anteriores, de la más reciente a la más antigua. */
+  past: FeaturedWindow[];
+  /** Contador de aciertos de todas las semanas, por destacado. */
+  record: Record<"week" | "weekend", HistorySummary>;
 }
 
 /** Parámetros de una URL a partir de un objeto (omite vacíos). */
@@ -474,5 +537,6 @@ export const api = {
     }),
   createSingles: (bets: NewSingles) => send<{ ids: number[] }>("/api/bets/singles", "POST", bets),
   deleteBet: (id: number) => request<{ deleted: number }>(`/api/bets/${id}`, { method: "DELETE" }),
+  featured: (sport: SportKey) => request<FeaturedResponse>(`/api/featured?${toQuery({ sport })}`),
   performance: (sport: SportKey, f: PerformanceFilters) => request<Performance>(`/api/performance?${toQuery({ sport, ...f })}`),
 };

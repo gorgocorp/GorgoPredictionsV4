@@ -3,6 +3,7 @@
 Una cuenta con plan completo (admin o suscripción vigente) ve todo. Una cuenta free ve:
 - los parlays gratis de cada día y deporte: los de máxima probabilidad de 2 y 3 piernas que registra el sistema
   (la configuración estándar; los mismos que mide el historial);
+- los parlays destacados (el de la semana y el de fin de semana, app/core/featured.py), de todos los tamaños;
 - cualquier pierna de un partido que ya empezó o ya no está programado (no se puede apostar: es evidencia, no un
   pick). Un partido con horario por definir (TBD) sigue programado.
 Lo demás no sale de la API: la interfaz recibe sólo un aviso de que existe y lo muestra difuminado.
@@ -12,12 +13,14 @@ from datetime import datetime
 
 import psycopg
 
+from app.core.featured import FEATURED_MODES
+
 FREE_MODE = "prob"
 FREE_SIZES = (2, 3)
 
 
 def is_free_parlay(mode: str, n_legs: int) -> bool:
-    return mode == FREE_MODE and n_legs in FREE_SIZES
+    return (mode == FREE_MODE and n_legs in FREE_SIZES) or mode in FEATURED_MODES
 
 
 def free_visible_picks(conn: psycopg.Connection, pick_ids: list[int], now: datetime) -> set[int]:
@@ -31,9 +34,10 @@ def free_visible_picks(conn: psycopg.Connection, pick_ids: list[int], now: datet
         WHERE k.id = ANY(%(ids)s)
           AND (m.starts_at <= %(now)s OR m.state <> 'scheduled'
                OR EXISTS (SELECT 1 FROM core.parlay_legs l JOIN core.parlays p ON p.id = l.parlay_id
-                          WHERE l.pick_id = k.id AND p.mode = %(mode)s AND p.n_legs = ANY(%(sizes)s)))
+                          WHERE l.pick_id = k.id
+                            AND ((p.mode = %(mode)s AND p.n_legs = ANY(%(sizes)s)) OR p.mode = ANY(%(featured)s))))
         """,
-        {"ids": pick_ids, "now": now, "mode": FREE_MODE, "sizes": list(FREE_SIZES)},
+        {"ids": pick_ids, "now": now, "mode": FREE_MODE, "sizes": list(FREE_SIZES), "featured": list(FEATURED_MODES)},
     )
     return {r["id"] for r in rows}
 
@@ -47,7 +51,7 @@ def visible_legs(conn: psycopg.Connection, legs: list[dict], full: bool, now: da
 
 
 def visible_parlays(parlays: list[dict], full: bool) -> list[dict]:
-    """Parlays del sistema de un día que ve la cuenta (free: sólo los gratis)."""
+    """Parlays del sistema que ve la cuenta (free: sólo los gratis y los destacados)."""
     return parlays if full else [p for p in parlays if is_free_parlay(p["mode"], p["n_legs"])]
 
 

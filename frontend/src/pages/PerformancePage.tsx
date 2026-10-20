@@ -5,6 +5,7 @@ import { api, type CalibrationBin, type ClvSummary, type Performance, type Perfo
 import { BACKTESTS } from "../lib/backtest";
 import { clvExclusions } from "../lib/clv";
 import { pct, signedPct, signedPts } from "../lib/format";
+import { PARLAY_MODES } from "../lib/parlayModes";
 import { useSportContext } from "../lib/sportContext";
 import { SPORT_KEYS, SPORTS, type SportConfig } from "../lib/sports";
 
@@ -398,7 +399,7 @@ export function PerformancePage() {
                     <tbody>
                       {perf.data.parlays.map((p) => (
                         <tr key={`${p.mode}-${p.n_legs}`}>
-                          <td>{p.mode === "prob" ? "Máx. probabilidad" : "Máx. valor"}</td>
+                          <td>{PARLAY_MODES[p.mode].short}</td>
                           <td className="r num">{p.n_legs}</td>
                           <td className="r num">{p.count}</td>
                           <td className="r num">{pct(p.predicted, 1)}</td>

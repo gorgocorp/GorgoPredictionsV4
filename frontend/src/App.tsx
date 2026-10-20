@@ -4,6 +4,7 @@ import { ErrorState, Skeleton } from "./components/States";
 import { isAdmin, useSessionQuery, ViewerProvider } from "./lib/session";
 import { lastSport, useSportTheme } from "./lib/sportContext";
 import { AccountPage } from "./pages/AccountPage";
+import { FeaturedPage } from "./pages/FeaturedPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MyBetsPage } from "./pages/MyBetsPage";
@@ -44,6 +45,7 @@ export function App() {
           <Route path="/nba" element={<NbaDayPage />} />
           <Route path="/futbol" element={<FutbolDayPage />} />
           <Route path="/futbol/jornada" element={<RoundPage />} />
+          <Route path="/futbol/semana" element={<FeaturedPage sport="futbol" />} />
           <Route path="/historial" element={<HistoryPage />} />
           <Route path="/mis-apuestas" element={<MyBetsPage />} />
           <Route path="/rendimiento" element={<PerformancePage />} />

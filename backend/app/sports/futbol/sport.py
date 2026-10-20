@@ -45,4 +45,6 @@ SPORT = Sport(
     leg_outcome=leg_outcome,
     matchup=matchup,
     performance_filters=tracking.performance_filters,
+    # Sin props de jugador (al publicarse nadie conoce las alineaciones de días después) ni marcador exacto.
+    featured_excluded_markets=("player", "score"),
 )

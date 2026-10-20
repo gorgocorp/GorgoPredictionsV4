@@ -10,6 +10,7 @@ herramientas del navegador. Lo que la interfaz muestra difuminado es relleno gen
 |---|---|---|---|
 | Partidos, horarios, marcadores, bajas | ✅ | ✅ | ✅ |
 | Parlays gratis del día (máx. probabilidad de 2 y 3 piernas, configuración estándar) | ✅ | ✅ | ✅ |
+| Parlays de la semana y de fin de semana (fútbol, 2 a 5 piernas) y su contador | ✅ | ✅ | ✅ |
 | Proyecciones del modelo de partidos sin empezar | 🔒 | ✅ | ✅ |
 | Todas las piernas, parlays de 2 a 8, máximo valor, apuestas individuales sugeridas, "Personalizar" | 🔒 | ✅ | ✅ |
 | Jornada / varios días (fútbol) | 🔒 | ✅ | ✅ |
@@ -21,7 +22,8 @@ herramientas del navegador. Lo que la interfaz muestra difuminado es relleno gen
 | Usuarios (crear, plan, vencimiento, contraseña, desactivar) | — | — | ✅ |
 
 - Regla única (`app/core/access.py`): una cuenta free ve una pierna si su partido ya empezó (ya no se puede apostar:
-  es evidencia) o si está en un parlay gratis. Los parlays gratis son los mismos que registra y mide el historial.
+  es evidencia) o si está en un parlay gratis o en uno de la semana. Los parlays gratis son los mismos que registra
+  y mide el historial.
 - Un suscriptor ve todo hasta el último día de su suscripción, en hora local (`subscription_until`, incluido); sin
   fecha no vence. Al vencer ve lo mismo que free, sin cambiar su rol.
 - Recalcular y marcar bajas cambian los picks que todos ven y que mide el historial: sólo el admin.

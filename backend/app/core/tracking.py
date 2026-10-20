@@ -592,8 +592,8 @@ def performance_report(conn: psycopg.Connection, sport: Sport, **filters) -> str
     if d["parlays"]:
         lines.append("")
         lines.append("Parlays sugeridos:")
-        lines.append(f"  {'Modo':<6}{'Piernas':>8}{'n':>6}{'Predicho':>10}{'Real':>8}{'ROI (con momio)':>18}")
+        lines.append(f"  {'Modo':<8}{'Piernas':>8}{'n':>6}{'Predicho':>10}{'Real':>8}{'ROI (con momio)':>18}")
         for r in d["parlays"]:
             roi = f"{r['roi']:+.1%}" if r["roi"] is not None else "—"
-            lines.append(f"  {r['mode']:<6}{r['n_legs']:>8}{r['count']:>6}{r['predicted']:>10.1%}{r['actual']:>8.1%}{roi:>18}")
+            lines.append(f"  {r['mode']:<8}{r['n_legs']:>8}{r['count']:>6}{r['predicted']:>10.1%}{r['actual']:>8.1%}{roi:>18}")
     return "\n".join(lines)

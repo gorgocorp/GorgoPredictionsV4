@@ -4,15 +4,15 @@ import { SUBSCRIBE_HINT } from "../components/Locked";
 import { EmptyState, ErrorState, ResultBadge, Skeleton } from "../components/States";
 import { api, toQuery, type HistoryFilters, type HistoryParlay, type HistorySummary } from "../lib/api";
 import { dateTime, localTime, longDate, odds, pct, signedPct } from "../lib/format";
+import { PARLAY_MODES } from "../lib/parlayModes";
 import { useViewer } from "../lib/session";
 import { asSport, SPORT_KEYS, SPORTS } from "../lib/sports";
 
 const PAGE_SIZE = 20;
 const MODES = [
   { value: "", label: "Todos" },
-  { value: "prob", label: "Máx. probabilidad" },
-  { value: "ev", label: "Máx. valor" },
-] as const;
+  ...(["prob", "ev", "week", "weekend"] as const).map((m) => ({ value: m, label: PARLAY_MODES[m].short })),
+];
 const RESULTS = [
   { value: "", label: "Todos" },
   { value: "won", label: "Ganados" },
@@ -111,7 +111,7 @@ function ParlayEvidence({ p }: { p: HistoryParlay }) {
             </span> {p.n_legs} piernas
           </h3>
           <span className="muted xs">
-            {p.mode === "prob" ? "Máxima probabilidad" : "Máximo valor"}
+            {PARLAY_MODES[p.mode].label}
             {p.preseason && " · pretemporada"}
           </span>
         </div>
@@ -184,7 +184,13 @@ function ParlayEvidence({ p }: { p: HistoryParlay }) {
                 </span>
               </span>
               <span className="leg-meta">
-                <span className="num">{pct(l.p_model)}</span>
+                {l.p_market === null ? (
+                  <span className="num">{pct(l.p_model)}</span>
+                ) : (
+                  <span className="num" title={`Modelo ${pct(l.p_model)} · Mercado ${pct(l.p_market)}: se promete la menor`}>
+                    {pct(Math.min(l.p_model, l.p_market))}
+                  </span>
+                )}
                 <br />
                 <span className="muted xs num">{l.odd ? odds(l.odd) : "sin momio"}</span>
                 <br />

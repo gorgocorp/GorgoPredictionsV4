@@ -184,6 +184,7 @@ export function Header() {
           Día
         </NavLink>
         {sport === "futbol" && <NavLink to="/futbol/jornada">Jornada</NavLink>}
+        {sport === "futbol" && <NavLink to="/futbol/semana">Semana</NavLink>}
         <NavLink to="/historial">Historial</NavLink>
         <NavLink to="/mis-apuestas">Mis apuestas</NavLink>
         <NavLink to={`/rendimiento?deporte=${sport}`}>Rendimiento</NavLink>

@@ -21,6 +21,7 @@ from app.api.refresh import refresh_days
 from app.config import LOCAL_TZ
 from app.core.access import gate_projection, visible_legs, visible_parlays
 from app.core.accounts import Viewer
+from app.core.parlay import MODES
 from app.db import connect
 from app.sports.nba.matches import SCHEDULED
 from app.sports.nba.sport import SPORT
@@ -90,6 +91,7 @@ WHERE m.sport = 'nba' AND m.local_date = %s
 ORDER BY g.starts_at, g.id
 """
 
+# Parlays del día (los destacados de la semana tienen su propia ruta: /api/featured).
 PARLAYS_SQL = """
 SELECT p.id, p.mode, p.n_legs, p.probability::float AS probability, p.odd::float AS odd,
        p.result, p.settled_odd::float AS settled_odd, p.evaluated_at,
@@ -99,7 +101,7 @@ FROM core.parlays p
 JOIN core.parlay_legs l ON l.parlay_id = p.id
 JOIN core.picks k ON k.id = l.pick_id
 JOIN core.matches m ON m.id = k.match_id
-WHERE p.sport = 'nba' AND p.day = %s
+WHERE p.sport = 'nba' AND p.day = %s AND p.mode = ANY(%s)
 ORDER BY p.mode, p.n_legs, l.position
 """
 
@@ -152,7 +154,7 @@ def day_view(day: date, viewer: Viewer = Depends(current_viewer)) -> dict:
     now = datetime.now(LOCAL_TZ)
     with connect() as conn:
         games = conn.execute(GAMES_SQL, (day,)).fetchall()
-        parlay_rows = conn.execute(PARLAYS_SQL, (day,)).fetchall()
+        parlay_rows = conn.execute(PARLAYS_SQL, (day, list(MODES))).fetchall()
         absences = conn.execute(ABSENCES_SQL, {"day": day}).fetchall()
         report_rows = conn.execute(REPORT_SQL, (day,)).fetchall()
     report_at = report_rows[0]["report_at"] if report_rows else None

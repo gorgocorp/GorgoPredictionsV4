@@ -262,6 +262,16 @@ def cmd_settle(args) -> None:
     print(f"Liquidadas: {counts['picks']} piernas, {counts['parlays']} parlays, {counts['bets']} apuestas tuyas")
 
 
+def cmd_featured(args) -> None:
+    from app.core.featured import publish_featured
+
+    sports = [s for s in _selected(args) if s.featured_excluded_markets is not None]
+    with connect() as conn:
+        for sport in sports:
+            n = publish_featured(conn, sport)
+            print(f"{sport.label}: {n} parlays destacados publicados" if n else f"{sport.label}: nada que publicar ahora")
+
+
 def cmd_performance(args) -> None:
     from app.core.tracking import performance_report
 
@@ -373,6 +383,9 @@ def main() -> None:
     p.set_defaults(func=cmd_record)
 
     with_sport(sub.add_parser("settle", help="Liquida piernas, parlays y tus apuestas de partidos terminados")).set_defaults(func=cmd_settle)
+    with_sport(
+        sub.add_parser("featured", help="Publica los parlays de la semana y de fin de semana que ya toquen (lo hace el scheduler)")
+    ).set_defaults(func=cmd_featured)
 
     p = with_sport(sub.add_parser("performance", help="Rendimiento real de los picks registrados"), "Deporte (obligatorio)")
     p.add_argument("--include-preseason", action="store_true", help="NBA: incluir la pretemporada")

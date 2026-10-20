@@ -57,6 +57,10 @@ class Sport:
     # Expresión booleana sobre m (core.matches): el partido es de pretemporada. Sólo si el deporte la tiene.
     preseason_sql: str | None = None
 
+    # Parlays destacados (app/core/featured.py): mercados que no entran. None = el deporte no los tiene (necesitan
+    # picks registrados con días de anticipación).
+    featured_excluded_markets: tuple[str, ...] | None = None
+
 
 def minutes_env(name: str, default: str) -> timedelta | None:
     """Anticipación en minutos desde el entorno; 0 (o menos) la desactiva."""
