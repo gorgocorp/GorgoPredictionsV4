@@ -21,7 +21,7 @@ function readTheme(): Theme {
   }
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(readTheme);
 
   useEffect(() => {

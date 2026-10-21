@@ -403,6 +403,73 @@ export interface FeaturedResponse {
   record: Record<"week" | "weekend", HistorySummary>;
 }
 
+/** Tipo de parlay gratis en los resultados públicos: los del día (2 y 3 piernas) o un destacado. */
+export type ResultsKind = "daily" | "week" | "weekend";
+
+/** Pierna de un parlay en los resultados públicos: copia de lo que se registró, sin IDs. */
+export interface ResultsLeg {
+  locked: false;
+  position: number;
+  sport: SportKey;
+  competition: string;
+  matchup: string;
+  starts_at: string;
+  market: string;
+  description: string;
+  p_model: number;
+  /** Probabilidad del mercado al registrarse: la pierna promete la menor de las dos. */
+  p_market: number | null;
+  odd: number | null;
+  result: Result;
+  outcome: { value: number | null; text: string };
+}
+
+export interface ResultsParlay {
+  id: number;
+  sport: SportKey;
+  day: string;
+  mode: ParlayMode;
+  kind: ResultsKind;
+  n_legs: number;
+  /** Lo que se prometió: el producto de lo que promete cada pierna. */
+  probability: number;
+  odd: number | null;
+  result: Result;
+  settled_odd: number | null;
+  bookmaker: string | null;
+  /** Cuándo se registró la versión que se mide (antes de su primer partido). */
+  evaluated_at: string;
+  first_start: string;
+  /** Unidades a 1 por parlay; null si no se liquidó o le faltó momio. */
+  profit: number | null;
+  legs: (ResultsLeg | LockedLeg)[];
+}
+
+/** Resultados públicos (/api/public/results): sin sesión, sólo parlays gratis y sólo los ya liquidados. */
+export interface ResultsResponse {
+  /** Primer día que cuenta (YYYY-MM-DD). */
+  since: string;
+  /** Todos los que cuentan, liquidados y en juego. */
+  summary: HistorySummary;
+  /** Parlays del día de esas fechas que se armaron con la regla anterior y no cuentan. */
+  excluded: number;
+  groups: { sport: SportKey; kind: ResultsKind; summary: HistorySummary }[];
+  /** Del mes más reciente al más antiguo (YYYY-MM). */
+  months: { month: string; summary: HistorySummary }[];
+  /** Piernas liquidadas, cada pick una vez. `promised`: promedio de lo prometido. */
+  legs: { settled: number; won: number; promised: number | null };
+  calibration: { lo: number; hi: number; n: number; promised: number; actual: number }[];
+  /** Parlays liquidados (los que se listan). */
+  total: number;
+  items: ResultsParlay[];
+}
+
+export interface ResultsFilters {
+  sport?: SportKey;
+  limit?: number;
+  offset?: number;
+}
+
 /** Parámetros de una URL a partir de un objeto (omite vacíos). */
 export function toQuery(f: object): string {
   const q = new URLSearchParams();
@@ -541,4 +608,9 @@ export const api = {
   deleteBet: (id: number) => request<{ deleted: number }>(`/api/bets/${id}`, { method: "DELETE" }),
   featured: (sport: SportKey) => request<FeaturedResponse>(`/api/featured?${toQuery({ sport })}`),
   performance: (sport: SportKey, f: PerformanceFilters) => request<Performance>(`/api/performance?${toQuery({ sport, ...f })}`),
+  /** Sin sesión. */
+  public: {
+    resultsStatus: () => request<{ enabled: boolean }>("/api/public/results/status"),
+    results: (f: ResultsFilters) => request<ResultsResponse>(`/api/public/results?${toQuery(f)}`),
+  },
 };

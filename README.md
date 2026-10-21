@@ -22,7 +22,8 @@ se vuelven a prender (su scheduler duplicaría la cuota de la API).
 
 Desde el 8-oct-2026 todo pide sesión, con tres planes: **free** (parlays gratis del día, historial y rendimiento),
 **suscriptor** (todo) y **admin** (todo, recalcular, bajas y cuentas). Qué ve cada uno y cómo está hecho:
-[docs/PLAN_USUARIOS.md](docs/PLAN_USUARIOS.md).
+[docs/PLAN_USUARIOS.md](docs/PLAN_USUARIOS.md). La excepción es la página pública de resultados (`/resultados`): el
+registro de los parlays gratis ya liquidados desde el 19-oct-2026, apagada salvo `PUBLIC_RESULTS=1`.
 
 ## Requisitos
 
@@ -76,8 +77,9 @@ Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos 
 API local (desde `backend/`): `../.venv/Scripts/python -m uvicorn app.api.main:app --port 8301 --reload`;
 documentación en `http://localhost:8301/api/docs`. Rutas de cada deporte en `/api/nba/*` y `/api/futbol/*`;
 comunes en `/api/meta`, `/api/bets` (boleto mixto; `POST /api/bets/singles` registra individuales), `/api/history[.csv]?sport=`, `/api/performance?sport=` y `/api/featured?sport=futbol` (parlays de la semana); cuentas
-en `/api/auth/*` (entrar, salir, quién soy, cambiar contraseña) y `/api/admin/users` (sólo admin). Todo lo demás
-responde 401 sin sesión.
+en `/api/auth/*` (entrar, salir, quién soy, cambiar contraseña) y `/api/admin/users` (sólo admin). Sin sesión:
+`/api/public/results[?sport=]` y `/api/public/results/status` (resultados públicos; 404 si están apagados). Todo lo
+demás responde 401 sin sesión.
 Si existe `frontend/dist` (`npm --prefix frontend run build`), la misma API sirve la interfaz en `http://localhost:8301`.
 
 Interfaz en desarrollo: `npm --prefix frontend run dev` → `http://localhost:5173` (manda `/api` a la API local del
@@ -110,12 +112,12 @@ frontend/src/
 ├── sports/
 │   ├── nba/         # config.ts (mercados, estadísticas, etiquetas), tarjeta de partido, bajas, Día
 │   └── futbol/      # config.ts, tarjeta de partido, bajas, Día y Jornada (jornada o rango de fechas)
-├── pages/           # Historial, Mis apuestas, Rendimiento; Entrar, Tu cuenta y Usuarios (admin)
+├── pages/           # Historial, Mis apuestas, Rendimiento; Entrar, Tu cuenta, Usuarios (admin) y Resultados (pública)
 └── lib/             # API, preferencias por deporte, boleto, armado de parlays, formatos
 ```
 
 - La interfaz es una sola: `/nba`, `/futbol`, `/futbol/jornada`, `/historial`, `/mis-apuestas`, `/rendimiento`,
-  `/cuenta` y `/usuarios` (admin). Sin sesión, cualquier ruta muestra "Entrar".
+  `/cuenta` y `/usuarios` (admin). Sin sesión, cualquier ruta muestra "Entrar", salvo `/resultados` (pública).
   El boleto acepta piernas de los dos deportes y se registra como parlay o como apuestas individuales (una por pierna,
   cada una con su monto, todas o ninguna); cada deporte guarda sus preferencias (mercados, ligas, mínimos) y
   tu casa de apuestas es común. "Apuestas individuales" sugiere la mejor pierna de cada partido por probabilidad o por

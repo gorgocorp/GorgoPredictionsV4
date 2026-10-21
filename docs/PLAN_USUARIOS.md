@@ -1,6 +1,7 @@
 # Cuentas y planes (free · suscriptor · admin)
 
-Decidido el 8-oct-2026. Toda la plataforma pide sesión; sólo el administrador crea cuentas. Lo que ve cada plan lo
+Decidido el 8-oct-2026. Toda la plataforma pide sesión (salvo la página pública de resultados, abajo); sólo el
+administrador crea cuentas. Lo que ve cada plan lo
 decide la **API**: a una cuenta free no le llegan los datos que no incluye su plan, así que no se pueden ver con las
 herramientas del navegador. Lo que la interfaz muestra difuminado es relleno genérico.
 
@@ -27,6 +28,23 @@ herramientas del navegador. Lo que la interfaz muestra difuminado es relleno gen
 - Un suscriptor ve todo hasta el último día de su suscripción, en hora local (`subscription_until`, incluido); sin
   fecha no vence. Al vencer ve lo mismo que free, sin cambiar su rol.
 - Recalcular y marcar bajas cambian los picks que todos ven y que mide el historial: sólo el admin.
+
+## Página pública de resultados (sin cuenta)
+
+Decidida el 21-oct-2026: un registro honesto de los parlays gratis para quien todavía no tiene cuenta, en
+`/resultados` (con o sin sesión) y enlazado desde "Entrar". **Apagada** salvo `PUBLIC_RESULTS=1` en el `.env`:
+apagada, `/api/public/results` responde 404 y la página dice que todavía no está disponible.
+
+- Cuentan los parlays que ve una cuenta free (máxima probabilidad de 2 y 3 piernas de cada día y deporte, y los de
+  la semana y de fin de semana) **desde el 19-oct-2026** que prometen en cada pierna la menor entre el modelo y el
+  mercado. La fecha no se mueve. Los del día 19 se congelaron con la regla anterior y no cuentan; la página dice
+  cuántos son.
+- Sólo salen completos los parlays ya liquidados, con lo que de ellos ve una cuenta free (`lock_legs`); los que
+  siguen en juego sólo se cuentan. Nada de un partido sin empezar llega sin cuenta.
+- Muestra: aciertos contra lo esperado, piernas acertadas contra lo prometido, ganancia a 1 unidad por parlay,
+  desglose por tipo y por mes, calibración de lo prometido por pierna y cada parlay con su hora de registro.
+- Sin IDs del proveedor. Cada respuesta se guarda 5 minutos en memoria del proceso web (no pide sesión).
+- Código: `app/core/results.py` (qué cuenta), `app/api/results.py` (ruta e interruptor), página `ResultsPage.tsx`.
 
 ## Cómo está hecho
 
@@ -55,7 +73,8 @@ En Docker: `docker compose run --rm app set-password GorgoAdmin`. Lo mismo se ha
 
 ## Pendiente (cuando se abra a otros)
 
-1. Publicar con HTTPS (`COOKIE_SECURE=1`) y cambiar la contraseña de GorgoAdmin por una larga.
+1. Publicar con HTTPS (`COOKIE_SECURE=1`) y cambiar la contraseña de GorgoAdmin por una larga. Decidir entonces si
+   se prende la página pública de resultados (`PUBLIC_RESULTS=1`).
 2. Vistas por usuario: guardar en el servidor las preferencias de "Personalizar" (hoy viven en cada navegador) y
    permitir varias con nombre.
 3. Registro abierto, correo para recuperar la contraseña y aviso de privacidad.

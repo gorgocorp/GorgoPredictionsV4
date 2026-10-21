@@ -8,6 +8,13 @@ from collections.abc import Iterable
 from typing import Any
 
 
+def parlay_profit(p: dict[str, Any]) -> float | None:
+    """Unidades ganadas a 1 por parlay con su momio liquidado; None si no se liquidó o le faltó momio."""
+    if p["result"] not in ("won", "lost") or not p["settled_odd"]:
+        return None
+    return p["settled_odd"] - 1 if p["result"] == "won" else -1.0
+
+
 def summarize(parlays: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """Resumen de parlays: aciertos reales vs. esperados por el modelo y unidades a 1 por parlay.
 

@@ -1,8 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { BrandMark } from "../components/Header";
 import { Spinner } from "../components/States";
 import { api, ApiError } from "../lib/api";
+import { RESULTS_PATH } from "../lib/results";
 import { startSession } from "../lib/session";
 import { lastSport } from "../lib/sportContext";
 
@@ -16,6 +18,7 @@ export function LoginPage() {
     mutationFn: () => api.auth.login(username.trim(), password),
     onSuccess: (viewer) => startSession(client, viewer),
   });
+  const publicResults = useQuery({ queryKey: ["public-results-status"], queryFn: api.public.resultsStatus, staleTime: 300_000 });
   const error = login.error instanceof ApiError ? login.error.message : login.error ? "No se pudo entrar. Intenta otra vez." : null;
 
   const submit = (e: FormEvent) => {
@@ -84,6 +87,11 @@ export function LoginPage() {
         <p className="muted xs" style={{ margin: 0 }}>
           ¿No tienes cuenta? Las cuentas las crea el administrador.
         </p>
+        {publicResults.data?.enabled && (
+          <p className="small" style={{ margin: 0 }}>
+            <Link to={RESULTS_PATH}>Ver los resultados de nuestros parlays gratis</Link>
+          </p>
+        )}
       </form>
     </main>
   );

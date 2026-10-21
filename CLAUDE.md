@@ -25,7 +25,8 @@ GorgoNBAParlays y GorgoPredictionsV3. Plan, fases y decisiones: `docs/PLAN_UNION
   patrones; textos en español de México. Igual que el backend: lo común en `frontend/src/{components,pages,lib}` y
   lo de cada deporte en `frontend/src/sports/<deporte>/` (su `config.ts` configura las piezas comunes). Los tipos de
   `api.ts` reflejan lo que devuelve la API: no inventar campos.
-- Cuentas (`docs/PLAN_USUARIOS.md`): todo pide sesión. Lo que ve cada plan lo decide la API con
+- Cuentas (`docs/PLAN_USUARIOS.md`): todo pide sesión, salvo la página pública de resultados (`/resultados`,
+  `app/core/results.py`: parlays gratis ya liquidados, apagada salvo `PUBLIC_RESULTS`). Lo que ve cada plan lo decide la API con
   `app/core/access.py` (a una cuenta free no le llegan los datos que no incluye su plan; difuminar en la interfaz no
   basta). Toda ruta nueva que devuelva picks, proyecciones o parlays pasa por ahí, y las que cambian lo que ven todos
   (recalcular, bajas) piden admin. Las apuestas se leen y se borran siempre por `user_id`. Nunca guardar una

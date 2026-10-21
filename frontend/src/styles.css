@@ -289,6 +289,9 @@ select {
   cursor: pointer;
   white-space: nowrap;
 }
+a.btn {
+  text-decoration: none;
+}
 .btn:hover:not(:disabled) {
   background: var(--surface-2);
 }
@@ -1098,6 +1101,14 @@ table.data td.wrap {
 }
 .chart .grid line {
   stroke: var(--border);
+}
+
+/* ---------------------------------------------------------------- resultados públicos */
+.results-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
 }
 
 /* ---------------------------------------------------------------- responsive */

@@ -3,6 +3,7 @@
 - /api/nba/* y /api/futbol/*: lo propio de cada deporte (día, piernas, plantel, bajas, jornadas).
 - /api/meta, /api/bets, /api/history, /api/performance: lo común (un boleto puede mezclar deportes).
 - /api/auth/*: entrar y salir; /api/admin/*: cuentas (sólo admin); /api/logos/*: logos sin la URL del proveedor.
+- /api/public/results: los resultados públicos, sin sesión y apagados salvo PUBLIC_RESULTS (app/core/results.py).
 Todo lo demás pide sesión; lo que ve cada plan lo decide app/core/access.py. Lee lo que registra el scheduler y
 permite recalcular un día (sólo admin). Si STATIC_DIR apunta a la interfaz compilada, también la sirve (una sola
 app en Docker; la interfaz se sirve sin sesión para poder mostrar la pantalla de entrar).
@@ -21,13 +22,13 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from app.api import admin, auth, featured, logos
+from app.api import admin, auth, featured, logos, results
 from app.api.auth import current_viewer, full_viewer
 from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS, SHARP_BOOKMAKER
 from app.core.access import free_visible_picks, lock_legs
 from app.core.accounts import Viewer
 from app.core.bets import BetError, LegInput, SingleInput, create_bet, create_singles, delete_bet, list_bets
-from app.core.evidence import summarize
+from app.core.evidence import parlay_profit, summarize
 from app.core.featured import FEATURED_MODES
 from app.core.parlay import MODES
 from app.core.sport import Sport
@@ -43,6 +44,7 @@ app = FastAPI(title="GorgoPredictions V4", docs_url="/api/docs", openapi_url="/a
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(results.router)  # sin sesión: es la página pública
 app.include_router(logos.router, dependencies=[Depends(current_viewer)])
 app.include_router(featured.router, dependencies=[Depends(current_viewer)])
 for module in SPORT_APIS.values():
@@ -179,12 +181,6 @@ def _history_legs(conn, rows: list[dict], viewer: Viewer) -> dict[int, list[dict
     return lock_legs(conn, legs, viewer.full, _now())
 
 
-def _profit(p: dict) -> float | None:
-    if p["result"] not in ("won", "lost") or not p["settled_odd"]:
-        return None
-    return p["settled_odd"] - 1 if p["result"] == "won" else -1.0
-
-
 @api.get("/api/history")
 def history(
     sport: str | None = None,
@@ -215,7 +211,7 @@ def history(
                 **{k: r[k] for k in ("id", "sport", "day", "mode", "n_legs", "probability", "odd", "result",
                                      "settled_odd", "evaluated_at", "settled_at", "first_start", "preseason",
                                      "bookmaker", "model_version")},
-                "profit": _profit(r),
+                "profit": parlay_profit(r),
                 "recorded_before_start": r["evaluated_at"] < r["first_start"],
                 "locked": any(leg["locked"] for leg in legs.get(r["id"], [])),
                 "legs": legs.get(r["id"], []),
@@ -255,7 +251,7 @@ def history_csv(
         "resultado_pierna", "valor_real", "detalle_real", "prob_mercado_pierna",
     ])
     for r in rows:
-        profit = _profit(r)
+        profit = parlay_profit(r)
         for leg in legs.get(r["id"], []):
             writer.writerow([
                 r["day"].isoformat(), sports[r["sport"]].label, r["id"], MODE_ES[r["mode"]], r["n_legs"],

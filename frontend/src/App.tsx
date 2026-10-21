@@ -1,7 +1,8 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Header } from "./components/Header";
 import { ErrorState, Skeleton } from "./components/States";
 import { isAdmin, useSessionQuery, ViewerProvider } from "./lib/session";
+import { RESULTS_PATH } from "./lib/results";
 import { lastSport, useSportTheme } from "./lib/sportContext";
 import { AccountPage } from "./pages/AccountPage";
 import { FeaturedPage } from "./pages/FeaturedPage";
@@ -9,16 +10,24 @@ import { HistoryPage } from "./pages/HistoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MyBetsPage } from "./pages/MyBetsPage";
 import { PerformancePage } from "./pages/PerformancePage";
+import { ResultsPage } from "./pages/ResultsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { DayPage as FutbolDayPage } from "./sports/futbol/DayPage";
 import { RoundPage } from "./sports/futbol/RoundPage";
 import { DayPage as NbaDayPage } from "./sports/nba/DayPage";
 
-/** Todo pide sesión: sin ella, cualquier ruta muestra "Entrar" y, al entrar, se queda en la ruta pedida. */
+/**
+ * Todo pide sesión: sin ella, cualquier ruta muestra "Entrar" y, al entrar, se queda en la ruta pedida. La excepción
+ * es /resultados, la página pública, que se ve igual con o sin sesión.
+ */
 export function App() {
   useSportTheme();
   const session = useSessionQuery();
+  const { pathname } = useLocation();
 
+  if (pathname === RESULTS_PATH) {
+    return <ResultsPage signedIn={session.data === undefined ? undefined : session.data !== null} />;
+  }
   if (session.isPending) {
     return (
       <main className="login-page" aria-busy="true" aria-label="Cargando">
