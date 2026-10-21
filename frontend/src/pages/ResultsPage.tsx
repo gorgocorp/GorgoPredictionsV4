@@ -202,7 +202,9 @@ function ResultCard({ p }: { p: ResultsParlay }) {
           <span className="stat-value">{pct(p.probability, 1)}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Momio {book}</span>
+          <span className="stat-label" title="Momio de referencia con el que se mide la ganancia">
+            Ref. {book}
+          </span>
           <span className="stat-value" title={p.settled_odd ? undefined : `Alguna pierna no la cotizaba ${book}`}>
             {p.settled_odd ? p.settled_odd.toFixed(2) : "—"}
           </span>
@@ -285,8 +287,9 @@ function HowWeCount({ data }: { data: ResultsResponse }) {
           el resultado oficial. La hora de registro sale en cada uno.
         </li>
         <li>
-          La ganancia es a 1 unidad por parlay con el momio de la casa al registrarse. Un parlay sin momio de la casa
-          cuenta para los aciertos pero no para la ganancia; una pierna anulada sale del parlay.
+          La ganancia es a 1 unidad por parlay con el momio de nuestra casa de referencia al registrarse (sale en cada
+          parlay); en tu casa el momio puede ser un poco distinto. Un parlay sin momio de esa casa cuenta para los aciertos
+          pero no para la ganancia; una pierna anulada sale del parlay.
         </li>
         <li>Aquí sólo salen los parlays que ya terminaron. Los que siguen en juego se ven con una cuenta.</li>
       </ul>

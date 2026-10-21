@@ -1,5 +1,7 @@
 import type { FeaturedLeg, FeaturedParlay, FeaturedWindow } from "./api";
 import { bestBookOdd } from "./books";
+import { acceptFrom, parlayAcceptFrom } from "./builder";
+import { odds } from "./format";
 import type { SlipLeg } from "./slip";
 
 /** Lo que se promete de una pierna destacada: la menor entre el modelo y el mercado. */
@@ -23,7 +25,17 @@ export function canLoad(p: FeaturedParlay, now: number = Date.now()): boolean {
   return p.legs.every((l) => new Date(l.starts_at).getTime() > now);
 }
 
-/** Precio a mostrar de una pierna: el de la casa del sistema o, si no la cotiza, el mejor de las otras casas. */
+/** "Acepta desde" de una pierna destacada: como en máxima probabilidad, lo que paga el mercado. */
+export function legAcceptFrom(leg: FeaturedLeg): number | null {
+  return acceptFrom(leg, "prob");
+}
+
+/** "Acepta desde" del parlay destacado completo. */
+export function featuredAcceptFrom(p: FeaturedParlay): number | null {
+  return parlayAcceptFrom(p.legs, "prob");
+}
+
+/** Momio de referencia de una pierna: el de la casa del sistema o, si no la cotiza, el mejor de las otras casas. */
 export function legPrice(leg: FeaturedLeg): { odd: number; book: string | null } | null {
   if (leg.odd) return { odd: leg.odd, book: null };
   const other = bestBookOdd(leg.book_odds);
@@ -44,13 +56,13 @@ export function toSlipLegs(p: FeaturedParlay): SlipLeg[] {
   }));
 }
 
-/** Texto para copiar: encabezado y una línea por pierna con su precio. */
-export function copyText(label: string, p: FeaturedParlay, bookmaker: string): string {
-  const head = `${label} · ${p.n_legs} piernas · prob. ${(p.probability * 100).toFixed(1)}%${p.odd ? ` · momio ${bookmaker} ${p.odd.toFixed(2)}` : ""}`;
+/** Texto para copiar: encabezado y una línea por pierna con lo menos que conviene aceptar en cualquier casa. */
+export function copyText(label: string, p: FeaturedParlay): string {
+  const minimum = featuredAcceptFrom(p);
+  const head = `${label} · ${p.n_legs} piernas · prob. ${(p.probability * 100).toFixed(1)}%${minimum ? ` · acepta desde ${minimum.toFixed(2)}` : ""}`;
   const lines = p.legs.map((l, i) => {
-    const price = legPrice(l);
-    const priceText = price ? ` @ ${price.odd.toFixed(2)}${price.book ? ` (${price.book})` : ""}` : "";
-    return `${i + 1}. ${l.matchup} — ${l.description}${priceText}`;
+    const legMinimum = legAcceptFrom(l);
+    return `${i + 1}. ${l.matchup} — ${l.description}${legMinimum ? ` · desde ${odds(legMinimum)}` : ""}`;
   });
   return [head, ...lines].join("\n");
 }

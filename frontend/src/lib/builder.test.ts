@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Leg, SportKey } from "./api";
-import { buildParlays, buildWhole, isEligible, parlayResult, promised } from "./builder";
+import { acceptFrom, buildParlays, buildWhole, isEligible, parlayAcceptFrom, parlayResult, promised } from "./builder";
 import { defaultPreferences, isAllowed, isDefault, type Preferences } from "./preferences";
 
 let nextId = 1;
@@ -250,6 +250,36 @@ describe("NBA", () => {
     it("sólo los tamaños elegidos", () => {
       expect(buildParlays(legs, prefs({ sizes: [3] }), "prob").map((p) => p.n)).toEqual([3]);
     });
+  });
+});
+
+describe("acepta desde", () => {
+  const leg = (overrides: Partial<Leg>) => legOf("nba", overrides);
+
+  it("máxima probabilidad: lo que paga el mercado, no el justo (ninguna casa lo paga)", () => {
+    // Hawks @ Magic, menos de 245.5: se promete 71% (justo 1.41) y las casas pagan alrededor de 1.31.
+    const l = leg({ p_model: 0.82, p_market: 0.71, odd: 1.31, book_odds: { Bet365: 1.31, "1xBet": 1.31, Pinnacle: 1.36 } });
+    expect(acceptFrom(l, "prob")).toBe(1.31);
+    // Sin otras casas en book_odds (piernas viejas), el momio de la casa elegida.
+    expect(acceptFrom(leg({ odd: 1.45, book_odds: null }), "prob")).toBe(1.45);
+    expect(acceptFrom(leg({ odd: null, book_odds: null }), "prob")).toBeNull();
+  });
+
+  it("máximo valor: el momio justo del modelo", () => {
+    expect(acceptFrom(leg({ p_model: 0.7, odd: 1.5 }), "ev")).toBe(1.43);
+  });
+
+  it("redondea hacia arriba: el que se muestra nunca queda abajo del mínimo", () => {
+    expect(acceptFrom(leg({ p_model: 0.7068, odd: 1.5 }), "ev")).toBe(1.42); // 1/0.7068 = 1.4148
+    expect(acceptFrom(leg({ odd: 1.3, book_odds: { Bet365: 1.3, "1xBet": 1.33 } }), "prob")).toBe(1.32); // mediana 1.315
+    expect(acceptFrom(leg({ odd: 1.3, book_odds: { Bet365: 1.3 } }), "prob")).toBe(1.3);
+  });
+
+  it("el del parlay es el producto de sus piernas, redondeado al final", () => {
+    const legs = [leg({ p_model: 0.7, odd: 1.5 }), leg({ p_model: 0.8, odd: 1.4 })];
+    expect(parlayAcceptFrom(legs, "ev")).toBe(1.79); // 1 / (0.7 × 0.8) = 1.7857
+    expect(parlayAcceptFrom(legs, "prob")).toBe(2.1); // 1.5 × 1.4
+    expect(parlayAcceptFrom([...legs, leg({ odd: null, book_odds: null })], "prob")).toBeNull();
   });
 });
 

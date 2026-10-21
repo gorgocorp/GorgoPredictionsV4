@@ -85,13 +85,16 @@ describe("parlays destacados", () => {
     });
   });
 
-  it("copia el parlay con el precio de cada pierna", () => {
-    const text = copyText("Parlay de la semana", parlay([leg(), leg({ pick_id: 2, odd: null, description: "No anotan ambos" })]), "Bet365");
+  it("copia el parlay con lo menos que conviene aceptar en cada pierna", () => {
+    const text = copyText(
+      "Parlay de la semana",
+      parlay([leg(), leg({ pick_id: 2, odd: null, description: "No anotan ambos", book_odds: { "1xBet": 1.33 } })]),
+    );
     expect(text).toBe(
       [
-        "Parlay de la semana · 2 piernas · prob. 57.0% · momio Bet365 1.70",
-        "1. América vs Chivas — Menos de 4.5 goles @ 1.30",
-        "2. América vs Chivas — No anotan ambos @ 1.33 (1xBet)",
+        "Parlay de la semana · 2 piernas · prob. 57.0% · acepta desde 1.75",
+        "1. América vs Chivas — Menos de 4.5 goles · desde 1.32 (-312)",
+        "2. América vs Chivas — No anotan ambos · desde 1.33 (-303)",
       ].join("\n"),
     );
   });

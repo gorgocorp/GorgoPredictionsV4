@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Leg } from "./api";
-import { bestBookOdd, oddFor, withPrices } from "./books";
+import { bestBookOdd, marketOdd, oddFor, withPrices } from "./books";
 
 const leg = (overrides: Partial<Leg>): Leg => ({
   id: 1,
@@ -34,6 +34,14 @@ describe("momios por casa", () => {
     expect(bestBookOdd({ Bet365: 1.54, "1xBet": 1.6, Pinnacle: 1.58 })).toEqual({ book: "1xBet", odd: 1.6 });
     expect(bestBookOdd({})).toBeNull();
     expect(bestBookOdd(null)).toBeNull();
+  });
+
+  it("lo que paga el mercado es la mediana de las casas que cotizan la pierna", () => {
+    expect(marketOdd({ Bet365: 1.54, "1xBet": 1.48, Pinnacle: 1.6 })).toBe(1.54);
+    expect(marketOdd({ Bet365: 1.3, "1xBet": 1.34 })).toBeCloseTo(1.32);
+    expect(marketOdd({ Pinnacle: 1.4 })).toBe(1.4);
+    expect(marketOdd({})).toBeNull();
+    expect(marketOdd(null)).toBeNull();
   });
 
   it("busca la casa sin distinguir mayúsculas", () => {

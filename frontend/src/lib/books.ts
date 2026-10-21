@@ -17,6 +17,14 @@ export function bestBookOdd(bookOdds: Record<string, number> | null | undefined)
   return best;
 }
 
+/** Lo que paga el mercado por una pierna: la mediana de los momios de las casas de la API que la cotizan. */
+export function marketOdd(bookOdds: Record<string, number> | null | undefined): number | null {
+  const values = Object.values(bookOdds ?? {}).sort((a, b) => a - b);
+  if (values.length === 0) return null;
+  const mid = Math.floor(values.length / 2);
+  return values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+}
+
 /**
  * Piernas con `odd` = momio de la casa elegida para comparar. La casa del sistema (`primary`) ya
  * viene en `odd`; para otra casa se toma de `book_odds` (null si esa casa no la cotiza).

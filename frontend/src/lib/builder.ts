@@ -1,5 +1,5 @@
 import type { Leg, Result } from "./api";
-import { bestBookOdd } from "./books";
+import { bestBookOdd, marketOdd } from "./books";
 import { isAllowed, type Preferences } from "./preferences";
 
 /**
@@ -21,6 +21,45 @@ export const MAX_PROB: Record<Mode, number> = { prob: 0.92, ev: 0.97 };
  */
 export function promised(leg: Pick<Leg, "p_model" | "p_market">, mode: Mode): number {
   return mode === "prob" && leg.p_market !== null ? Math.min(leg.p_model, leg.p_market) : leg.p_model;
+}
+
+type Priced = Pick<Leg, "p_model" | "odd" | "book_odds">;
+
+function rawAcceptFrom(leg: Priced, mode: Mode): number | null {
+  return mode === "ev" ? 1 / leg.p_model : (marketOdd(leg.book_odds) ?? leg.odd);
+}
+
+/** Redondea hacia arriba a 2 decimales: el momio que se muestra nunca queda abajo del mínimo real. */
+function ceilOdd(odd: number): number {
+  return Math.ceil(odd * 100 - 1e-9) / 100;
+}
+
+/** Qué significa "Acepta desde" en cada modo (texto visible y del title). */
+export const ACCEPT_HELP: Record<Mode, string> = {
+  prob: "“Acepta desde” es lo que paga el mercado (la mediana de las casas): si tu casa paga menos, pagas más comisión de la normal.",
+  ev: "“Acepta desde” es el momio justo del modelo: si tu casa paga menos, ya no hay valor.",
+};
+
+/**
+ * "Acepta desde": lo menos que conviene aceptar por una pierna en cualquier casa, esté o no en la API (p. ej.
+ * Caliente). Máximo valor: el momio justo del modelo; abajo de él ya no hay valor. Máxima probabilidad: lo que paga el
+ * mercado (la mediana de las casas de la API); abajo de él se paga más comisión de la normal. Ahí no sirve el justo:
+ * por su comisión, ninguna casa lo paga.
+ */
+export function acceptFrom(leg: Priced, mode: Mode): number | null {
+  const odd = rawAcceptFrom(leg, mode);
+  return odd === null ? null : ceilOdd(odd);
+}
+
+/** "Acepta desde" del parlay completo: el producto del de sus piernas (null si a alguna le falta). */
+export function parlayAcceptFrom(legs: Priced[], mode: Mode): number | null {
+  let product = 1;
+  for (const leg of legs) {
+    const odd = rawAcceptFrom(leg, mode);
+    if (odd === null) return null;
+    product *= odd;
+  }
+  return ceilOdd(product);
 }
 
 export interface BuiltParlay {

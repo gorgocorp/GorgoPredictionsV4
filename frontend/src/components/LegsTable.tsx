@@ -230,13 +230,17 @@ export function LegsTable({
                   <th scope="col" className="r" title="Probabilidad del mercado sin comisión (Pinnacle o mediana de casas)">
                     Mercado
                   </th>
-                  <th scope="col" className="r">
-                    Momio {bookmaker}
+                  <th scope="col" className="r" title={`Momio de referencia: el de ${bookmaker}`}>
+                    Ref. {bookmaker}
                   </th>
-                  <th scope="col" className="r" title="Momio que correspondería a la probabilidad del modelo">
+                  <th
+                    scope="col"
+                    className="r"
+                    title="Momio que correspondería a la probabilidad del modelo: si tu casa paga más, el modelo ve valor"
+                  >
                     Justo
                   </th>
-                  <th scope="col" className="r" title="Valor esperado por unidad: probabilidad × momio − 1">
+                  <th scope="col" className="r" title={`Valor esperado por unidad con el momio de ${bookmaker}: probabilidad × momio − 1`}>
                     EV
                   </th>
                   <th scope="col" className="r" title={config.hitsTitle}>

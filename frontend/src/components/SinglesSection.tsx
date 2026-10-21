@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Leg, SlateGame } from "../lib/api";
 import { bestBookOdd } from "../lib/books";
-import { MAX_WHOLE_LEGS, promised, rankedLegs, type Mode } from "../lib/builder";
+import { ACCEPT_HELP, acceptFrom, MAX_WHOLE_LEGS, promised, rankedLegs, type Mode } from "../lib/builder";
 import { odds, pct, signedPct } from "../lib/format";
 import { usePreferences } from "../lib/preferences";
 import { matchupOf, slip, toSlipLeg, useSlip } from "../lib/slip";
@@ -79,7 +79,7 @@ export function SinglesSection({
         <div>
           <h2 id="singles-title">Apuestas individuales</h2>
           <p className="muted small" style={{ margin: 0 }}>
-            {MODE_INFO[mode].help} La mejor de cada partido, con los mismos filtros que los parlays.
+            {MODE_INFO[mode].help} La mejor de cada partido, con los mismos filtros que los parlays. {ACCEPT_HELP[mode]}
           </p>
         </div>
         <div className="segmented" role="group" aria-label="Tipo de apuesta individual">
@@ -116,7 +116,9 @@ export function SinglesSection({
               const added = slipIds.has(l.id);
               const p = promised(l, mode);
               const ev = l.odd !== null ? p * l.odd - 1 : null;
-              const other = l.odd ? null : bestBookOdd(l.book_odds);
+              const minimum = acceptFrom(l, mode);
+              // Referencia: la casa elegida o, si no la cotiza, el mejor momio de las otras casas (con su nombre).
+              const ref = l.odd ? { book: bookmaker, odd: l.odd } : bestBookOdd(l.book_odds);
               const edge = l.p_market !== null ? l.p_model - l.p_market : null;
               const badge = l.player_status ? config.playerBadge(l.player_status) : null;
               return (
@@ -173,23 +175,28 @@ export function SinglesSection({
                       <strong>{pct(p)}</strong>
                     </span>
                     <br />
-                    {l.odd ? (
-                      <span className="muted xs num" title={`Momio de ${bookmaker}`}>
-                        {odds(l.odd)}
-                      </span>
-                    ) : other ? (
-                      <span className="muted xs" title={`${bookmaker} no la cotiza: el mejor momio de las otras casas`}>
-                        <span className="num">{odds(other.odd)}</span>
-                        <br />
-                        en {other.book}
+                    {minimum ? (
+                      <span className="xs num" title={ACCEPT_HELP[mode]}>
+                        desde {odds(minimum)}
                       </span>
                     ) : (
                       <span className="muted xs">sin momio</span>
                     )}
+                    {ref && (
+                      <>
+                        <br />
+                        <span className="muted xs num" title={l.odd ? "Momio de referencia" : `${bookmaker} no la cotiza: el mejor momio de las otras casas`}>
+                          ref. {ref.book} {ref.odd.toFixed(2)}
+                        </span>
+                      </>
+                    )}
                     {ev !== null && (
                       <>
                         <br />
-                        <span className={`xs num ${ev > 0 ? "ev-pos" : "ev-neg"}`} title="Valor esperado por unidad: probabilidad × momio − 1">
+                        <span
+                          className={`xs num ${ev > 0 ? "ev-pos" : "ev-neg"}`}
+                          title={`Valor esperado por unidad con el momio de ${bookmaker}: probabilidad × momio − 1`}
+                        >
                           EV {signedPct(ev)}
                         </span>
                       </>

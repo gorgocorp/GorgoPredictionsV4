@@ -1,5 +1,5 @@
 import type { Leg, SlateGame, SystemParlay } from "../lib/api";
-import type { BuiltParlay } from "../lib/builder";
+import { ACCEPT_HELP, type BuiltParlay } from "../lib/builder";
 import type { SportConfig } from "../lib/sports";
 import { Paywall, ParlaysPlaceholder } from "./Locked";
 import { ParlayCard } from "./ParlaysSection";
@@ -58,7 +58,7 @@ export function FreePicks({
               <p className="muted small" style={{ margin: 0 }}>
                 Los de máxima probabilidad de 2 y 3 piernas con la configuración estándar: los mismos que registra y mide el
                 historial. De cada pierna se promete la menor entre el modelo y el mercado. Nunca dos piernas del mismo
-                partido.
+                partido. {ACCEPT_HELP.prob}
               </p>
             </div>
           </div>

@@ -3,7 +3,18 @@ import { BetSlip } from "../components/BetSlip";
 import { EmptyState, ErrorState, ResultBadge, Skeleton } from "../components/States";
 import { useToast } from "../components/Toast";
 import { api, type FeaturedParlay, type FeaturedResponse, type FeaturedWindow, type HistorySummary, type SportKey } from "../lib/api";
-import { canLoad, copyText, legPrice, legProbability, rangeText, toSlipLegs, windowStatus } from "../lib/featured";
+import { ACCEPT_HELP } from "../lib/builder";
+import {
+  canLoad,
+  copyText,
+  featuredAcceptFrom,
+  legAcceptFrom,
+  legPrice,
+  legProbability,
+  rangeText,
+  toSlipLegs,
+  windowStatus,
+} from "../lib/featured";
 import { dateTime, localTime, odds, pct, shortDay } from "../lib/format";
 import { slip } from "../lib/slip";
 
@@ -18,6 +29,7 @@ function Rules({ rules }: { rules: FeaturedResponse["rules"] }) {
       </li>
       <li>Una pierna por partido y máximo {rules.max_per_market} del mismo mercado.</li>
       <li>Sin props de jugador: al publicarse nadie conoce las alineaciones de días después.</li>
+      <li>{ACCEPT_HELP.prob}</li>
     </ul>
   );
 }
@@ -66,6 +78,7 @@ function RecordCard({ label, s }: { label: string; s: HistorySummary }) {
 function FeaturedCard({ label, parlay, bookmaker, actions }: { label: string; parlay: FeaturedParlay; bookmaker: string; actions: boolean }) {
   const notify = useToast();
   const loadable = canLoad(parlay);
+  const minimum = featuredAcceptFrom(parlay);
 
   const load = () => {
     const previous = slip.get();
@@ -74,7 +87,7 @@ function FeaturedCard({ label, parlay, bookmaker, actions }: { label: string; pa
   };
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(copyText(label, parlay, bookmaker));
+      await navigator.clipboard.writeText(copyText(label, parlay));
       notify("Parlay copiado al portapapeles");
     } catch {
       notify("No se pudo copiar: tu navegador bloqueó el portapapeles");
@@ -95,18 +108,21 @@ function FeaturedCard({ label, parlay, bookmaker, actions }: { label: string; pa
           <span className="stat-value">{pct(parlay.probability, 1)}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Momio justo</span>
-          <span className="stat-value">{(1 / parlay.probability).toFixed(2)}</span>
+          <span className="stat-label">Acepta desde</span>
+          <span className="stat-value" title={ACCEPT_HELP.prob}>
+            {minimum ? minimum.toFixed(2) : "—"}
+          </span>
         </div>
         <div className="stat">
-          <span className="stat-label">{bookmaker}</span>
-          <span className="stat-value" title={parlay.odd ? undefined : `Alguna pierna no la cotiza ${bookmaker}`}>
-            {parlay.odd ? parlay.odd.toFixed(2) : "—"}
+          <span className="stat-label">Momio justo</span>
+          <span className="stat-value" title="Sin comisión: por su comisión, ninguna casa lo paga">
+            {(1 / parlay.probability).toFixed(2)}
           </span>
         </div>
       </div>
       <ol className="leg-list">
         {parlay.legs.map((l) => {
+          const legMinimum = legAcceptFrom(l);
           const price = legPrice(l);
           return (
             <li key={l.pick_id} className="leg-item">
@@ -134,13 +150,23 @@ function FeaturedCard({ label, parlay, bookmaker, actions }: { label: string; pa
                   Modelo {pct(l.p_model)} · Mercado {pct(l.p_market)}
                 </span>
                 <br />
-                {price ? (
-                  <span className="muted xs num" title={price.book ? `${bookmaker} no la cotiza: el mejor momio de las otras casas` : undefined}>
-                    {odds(price.odd)}
-                    {price.book && ` en ${price.book}`}
+                {legMinimum ? (
+                  <span className="xs num" title={ACCEPT_HELP.prob}>
+                    desde {odds(legMinimum)}
                   </span>
                 ) : (
                   <span className="muted xs">sin momio</span>
+                )}
+                {price && (
+                  <>
+                    <br />
+                    <span
+                      className="muted xs num"
+                      title={price.book ? `${bookmaker} no la cotiza: el mejor momio de las otras casas` : "Momio de referencia"}
+                    >
+                      ref. {price.book ?? bookmaker} {price.odd.toFixed(2)}
+                    </span>
+                  </>
                 )}
                 {l.result && (
                   <>

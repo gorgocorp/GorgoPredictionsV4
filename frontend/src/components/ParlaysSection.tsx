@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
 import type { Leg, SlateGame } from "../lib/api";
 import { bestBookOdd } from "../lib/books";
-import { buildParlays, buildWhole, promised, type BuiltParlay, type Mode } from "../lib/builder";
+import {
+  ACCEPT_HELP,
+  acceptFrom,
+  buildParlays,
+  buildWhole,
+  parlayAcceptFrom,
+  promised,
+  type BuiltParlay,
+  type Mode,
+} from "../lib/builder";
 import { odds, pct, signedPct } from "../lib/format";
 import { isDefault, usePreferences, type Preferences } from "../lib/preferences";
 import { matchupOf, slip, toSlipLeg } from "../lib/slip";
@@ -54,6 +63,7 @@ export function ParlayCard({
   const notify = useToast();
   // Máxima probabilidad promete la menor entre modelo y mercado; máximo valor, el modelo.
   const capped = parlay.mode === "prob";
+  const minimum = parlayAcceptFrom(parlay.legs, parlay.mode);
 
   const load = () => {
     const previous = slip.get();
@@ -63,11 +73,10 @@ export function ParlayCard({
 
   const copy = async () => {
     const lines = parlay.legs.map((l, i) => {
-      const other = l.odd ? null : bestBookOdd(l.book_odds);
-      const price = l.odd ? ` @ ${l.odd.toFixed(2)}` : other ? ` @ ${other.odd.toFixed(2)} (${other.book})` : "";
-      return `${i + 1}. ${matchupOf(config, games.get(l.match_id))} — ${l.description}${price}`;
+      const legMinimum = acceptFrom(l, parlay.mode);
+      return `${i + 1}. ${matchupOf(config, games.get(l.match_id))} — ${l.description}${legMinimum ? ` · desde ${odds(legMinimum)}` : ""}`;
     });
-    const head = `Parlay ${config.label} · ${parlay.n} piernas · prob.${capped ? "" : " modelo"} ${pct(parlay.probability, 1)}${parlay.odd ? ` · momio ${bookmaker} ${parlay.odd.toFixed(2)}` : ""}`;
+    const head = `Parlay ${config.label} · ${parlay.n} piernas · prob.${capped ? "" : " modelo"} ${pct(parlay.probability, 1)}${minimum ? ` · acepta desde ${minimum.toFixed(2)}` : ""}`;
     try {
       await navigator.clipboard.writeText([head, ...lines].join("\n"));
       notify("Parlay copiado al portapapeles");
@@ -93,20 +102,32 @@ export function ParlayCard({
           </span>
         </div>
         <div className="stat">
-          <span className="stat-label">Momio justo</span>
-          <span className="stat-value">{(1 / parlay.probability).toFixed(2)}</span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">{bookmaker}</span>
-          <span className="stat-value" title={parlay.ev !== null ? `EV ${signedPct(parlay.ev)}` : `Alguna pierna no la cotiza ${bookmaker}`}>
-            {parlay.odd ? parlay.odd.toFixed(2) : "—"}
+          <span className="stat-label">Acepta desde</span>
+          <span className="stat-value" title={ACCEPT_HELP[parlay.mode]}>
+            {minimum ? minimum.toFixed(2) : "—"}
           </span>
         </div>
+        {capped ? (
+          <div className="stat">
+            <span className="stat-label">Momio justo</span>
+            <span className="stat-value" title="Sin comisión: por su comisión, ninguna casa lo paga">
+              {(1 / parlay.probability).toFixed(2)}
+            </span>
+          </div>
+        ) : (
+          <div className="stat">
+            <span className="stat-label">Ref. {bookmaker}</span>
+            <span className="stat-value" title={parlay.ev !== null ? `EV ${signedPct(parlay.ev)}` : `Alguna pierna no la cotiza ${bookmaker}`}>
+              {parlay.odd ? parlay.odd.toFixed(2) : "—"}
+            </span>
+          </div>
+        )}
       </div>
       <ol className="leg-list">
         {parlay.legs.map((l) => {
-          // Si la casa elegida no la cotiza, el mejor momio de las otras casas (con su nombre).
-          const other = l.odd ? null : bestBookOdd(l.book_odds);
+          const legMinimum = acceptFrom(l, parlay.mode);
+          // Referencia: la casa elegida o, si no la cotiza, el mejor momio de las otras casas (con su nombre).
+          const ref = l.odd ? { book: bookmaker, odd: l.odd } : bestBookOdd(l.book_odds);
           return (
             <li key={l.id} className="leg-item">
               <span>
@@ -123,16 +144,20 @@ export function ParlayCard({
                   <span className="num">{pct(l.p_model)}</span>
                 )}
                 <br />
-                {l.odd ? (
-                  <span className="muted xs num">{odds(l.odd)}</span>
-                ) : other ? (
-                  <span className="muted xs" title={`${bookmaker} no la cotiza: el mejor momio de las otras casas`}>
-                    <span className="num">{odds(other.odd)}</span>
-                    <br />
-                    en {other.book}
+                {legMinimum ? (
+                  <span className="xs num" title={ACCEPT_HELP[parlay.mode]}>
+                    desde {odds(legMinimum)}
                   </span>
                 ) : (
                   <span className="muted xs">sin momio</span>
+                )}
+                {ref && (
+                  <>
+                    <br />
+                    <span className="muted xs num" title={l.odd ? "Momio de referencia" : `${bookmaker} no la cotiza: el mejor momio de las otras casas`}>
+                      ref. {ref.book} {ref.odd.toFixed(2)}
+                    </span>
+                  </>
                 )}
                 {l.result && (
                   <>
@@ -196,7 +221,7 @@ export function ParlaysSection({
         <div>
           <h2 id="parlays-title">Parlays sugeridos</h2>
           <p className="muted small" style={{ margin: 0 }}>
-            {MODE_INFO[mode].help} Nunca dos piernas del mismo partido.
+            {MODE_INFO[mode].help} Nunca dos piernas del mismo partido. {ACCEPT_HELP[mode]}
           </p>
         </div>
         <div className="card-actions">

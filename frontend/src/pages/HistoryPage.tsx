@@ -46,8 +46,8 @@ function Summary({ s }: { s: HistorySummary }) {
           </span>
           <span className="muted xs">
             {s.profit_units !== null
-              ? `ROI ${signedPct(s.roi)} · ${s.with_odds} parlays con momio de la casa`
-              : "Sólo cuentan parlays con momio de la casa en todas sus piernas"}
+              ? `ROI ${signedPct(s.roi)} · ${s.with_odds} parlays con momio de la casa de referencia`
+              : "Sólo cuentan parlays con momio de la casa de referencia en todas sus piernas"}
           </span>
         </div>
         <div className="card kpi">
@@ -124,7 +124,9 @@ function ParlayEvidence({ p }: { p: HistoryParlay }) {
           <span className="stat-value">{pct(p.probability, 1)}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Momio {p.bookmaker ?? "casa"}</span>
+          <span className="stat-label" title="Momio de referencia con el que se mide la ganancia">
+            Ref. {p.bookmaker ?? "casa"}
+          </span>
           <span className="stat-value">{p.odd ? p.odd.toFixed(2) : "—"}</span>
         </div>
         <div className="stat">
