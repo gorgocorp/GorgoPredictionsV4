@@ -25,7 +25,7 @@ export function App() {
   const session = useSessionQuery();
   const { pathname } = useLocation();
 
-  if (pathname === RESULTS_PATH) {
+  if (pathname.replace(/\/+$/, "") === RESULTS_PATH) {
     return <ResultsPage signedIn={session.data === undefined ? undefined : session.data !== null} />;
   }
   if (session.isPending) {

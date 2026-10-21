@@ -377,13 +377,25 @@ app.include_router(api)
 
 STATIC_DIR = Path(os.getenv("STATIC_DIR", Path(__file__).resolve().parents[3] / "frontend" / "dist"))
 
+# La página se revalida siempre: sin esto el navegador la guarda por su cuenta y, después de un despliegue, sigue
+# con la interfaz anterior (que apunta a otros archivos y no conoce las rutas nuevas). Lo de assets/ lleva su huella
+# en el nombre y nunca cambia.
+NO_CACHE = {"Cache-Control": "no-cache"}
+IMMUTABLE = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+
+def static_file(static_dir: Path, path: str) -> FileResponse:
+    """Un archivo de la interfaz compilada; cualquier otra ruta es la página (la interfaz resuelve la ruta)."""
+    file = (static_dir / path).resolve()
+    if path and file.is_file() and static_dir.resolve() in file.parents:
+        return FileResponse(file, headers=IMMUTABLE if path.startswith("assets/") else NO_CACHE)
+    return FileResponse(static_dir / "index.html", headers=NO_CACHE)
+
+
 if STATIC_DIR.is_dir():
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
         if path.startswith("api/"):
             raise HTTPException(status_code=404)
-        file = (STATIC_DIR / path).resolve()
-        if path and file.is_file() and STATIC_DIR.resolve() in file.parents:
-            return FileResponse(file)
-        return FileResponse(STATIC_DIR / "index.html")
+        return static_file(STATIC_DIR, path)
