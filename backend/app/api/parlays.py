@@ -1,5 +1,12 @@
 """Forma común de los parlays de un día en la API (una fila por pierna -> parlays con sus piernas)."""
 
+from app.core.parlay import MODES
+from app.core.value import MODE as VALUE_MODE
+
+# Parlays de un día que registra el sistema: los de cada modo y el parlay con valor (en prueba: sólo lo ve admin,
+# app/core/access.py). Los destacados tienen su propia ruta (/api/featured).
+DAY_MODES = [*MODES, VALUE_MODE]
+
 
 def group_parlays(rows: list[dict], match_key: str) -> list[dict]:
     """Filas de PARLAYS_SQL (una por pierna) -> parlays con sus piernas."""

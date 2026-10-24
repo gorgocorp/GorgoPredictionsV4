@@ -111,13 +111,16 @@ export interface Leg {
   book_odds: Record<string, number> | null;
 }
 
-/** Tipos de parlay que registra el sistema: los del día (máxima probabilidad y máximo valor) y los destacados. */
-export type ParlayMode = "prob" | "ev" | "week" | "weekend";
+/**
+ * Tipos de parlay que registra el sistema: los del día (máxima probabilidad y máximo valor), los destacados y el
+ * parlay con valor (en prueba: sólo le llega a admin).
+ */
+export type ParlayMode = "prob" | "ev" | "week" | "weekend" | "value";
 
 /** Parlay registrado por el sistema para un día (configuración estándar). A una cuenta free sólo le llegan los gratis. */
 export interface SystemParlay {
   id: number;
-  mode: "prob" | "ev";
+  mode: "prob" | "ev" | "value";
   n_legs: number;
   probability: number;
   odd: number | null;
@@ -252,6 +255,24 @@ export interface Performance {
   positive_ev: { n: number; hit_rate: number; avg_odd: number; profit: number; roi: number } | null;
   clv: ClvData | null;
   parlays: ParlayPerformance[];
+  /** Prueba del parlay con valor: sólo le llega a admin (null a los demás). */
+  value: ValueTrial | null;
+}
+
+/** El parlay con valor en prueba (app/core/value.py): su regla, sus resultados y el CLV de sus piernas. */
+export interface ValueTrial {
+  /** Primer día de la prueba. */
+  since: string;
+  rules: { n_legs: number; max_odd: number; max_price_gap: number; publish_hour: number; min_lead_hours: number };
+  record: HistorySummary;
+  /** CLV de sus piernas ya jugadas: momio publicado contra Pinnacle al cierre. */
+  clv: {
+    n: number;
+    avg: number | null;
+    median: number | null;
+    beat_rate: number | null;
+    excluded: { no_close: number; no_reference: number; short_window: number };
+  };
 }
 
 export interface PerformanceFilters {

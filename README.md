@@ -70,6 +70,7 @@ Los comandos de datos aceptan `--sport nba|futbol`; sin él corren para los dos 
 | `record-picks --sport X [--date D]` | Guarda piernas y parlays de un día (lo hace el scheduler) |
 | `settle [--sport X]` | Liquida piernas, parlays y tus apuestas (lo hace el scheduler) |
 | `featured [--sport X]` | Publica los parlays de la semana y de fin de semana que ya toquen (lo hace el scheduler) |
+| `value [--sport X]` | Publica el parlay con valor de los días que ya toquen (en prueba, sólo admin; lo hace el scheduler) |
 | `performance --sport nba [--include-preseason]` · `--sport futbol [--league ID]` | Rendimiento real, con CLV |
 | `backtest --sport X [--start --end --every N --teams-only]` | Evalúa los modelos día por día |
 | `scheduler [--sport X]` | Sincroniza, liquida y registra picks periódicamente |
@@ -180,6 +181,13 @@ una sola vez y ya no cambian (`app/core/featured.py`; el scheduler los publica e
   piernas que cumplan las reglas, no se publica y se reintenta en la siguiente corrida.
 - NBA todavía no los tiene: registra picks sólo 2 días adelante y sus momios llegan ~1 día antes
   (`featured_excluded_markets` en el contrato del deporte).
+
+## Parlay con valor (en prueba, sólo admin)
+
+Un parlay diario por deporte de 2 piernas en las que el momio de Bet365 paga más que el justo del modelo y del mercado
+(`app/core/value.py`, modo `value`, migración 0009). Se publica desde las 20:00 del día anterior y ya no cambia; se
+mide con resultados y con el CLV de sus piernas. Sólo lo ve admin (página del día, Historial y Rendimiento) hasta que
+la prueba decida: regla, evidencia y criterio en `docs/MODELOS.md`.
 
 ## Momios de publicación, cierre y CLV
 

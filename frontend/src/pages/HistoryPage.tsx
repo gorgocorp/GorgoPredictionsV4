@@ -5,7 +5,7 @@ import { EmptyState, ErrorState, ResultBadge, Skeleton } from "../components/Sta
 import { api, toQuery, type HistoryFilters, type HistoryParlay, type HistorySummary } from "../lib/api";
 import { dateTime, localTime, longDate, odds, pct, signedPct } from "../lib/format";
 import { PARLAY_MODES } from "../lib/parlayModes";
-import { useViewer } from "../lib/session";
+import { isAdmin, useViewer } from "../lib/session";
 import { asSport, SPORT_KEYS, SPORTS } from "../lib/sports";
 
 const PAGE_SIZE = 20;
@@ -13,6 +13,8 @@ const MODES = [
   { value: "", label: "Todos" },
   ...(["prob", "ev", "week", "weekend"] as const).map((m) => ({ value: m, label: PARLAY_MODES[m].short })),
 ];
+// El parlay con valor está en prueba: sólo admin lo ve (la API no se lo manda a nadie más).
+const ADMIN_MODES = [...MODES, { value: "value", label: PARLAY_MODES.value.short }];
 const RESULTS = [
   { value: "", label: "Todos" },
   { value: "won", label: "Ganados" },
@@ -285,7 +287,7 @@ export function HistoryPage() {
           <input className="input num" type="date" value={filters.hasta ?? ""} onChange={(e) => update({ hasta: e.target.value })} />
         </label>
         <div className="segmented" role="group" aria-label="Tipo de parlay">
-          {MODES.map((m) => (
+          {(isAdmin(viewer) ? ADMIN_MODES : MODES).map((m) => (
             <button key={m.value} type="button" aria-pressed={(filters.mode ?? "") === m.value} onClick={() => update({ modo: m.value || null })}>
               {m.label}
             </button>

@@ -1,4 +1,4 @@
-import type { Leg, Result } from "./api";
+import type { Leg, Result, SystemParlay } from "./api";
 import { bestBookOdd, marketOdd } from "./books";
 import { isAllowed, type Preferences } from "./preferences";
 
@@ -11,22 +11,27 @@ import { isAllowed, type Preferences } from "./preferences";
 
 export type Mode = "prob" | "ev";
 
+/** Cómo se lee un parlay: los modos que se arman aquí y el parlay con valor (en prueba), que sólo registra el sistema. */
+export type ParlayKind = Mode | "value";
+
 /** Tope de probabilidad por modo: piernas casi seguras pagan demasiado poco. */
 export const MAX_PROB: Record<Mode, number> = { prob: 0.92, ev: 0.97 };
 
 /**
  * Lo que se promete de una pierna. Máxima probabilidad escoge con el modelo pero promete la menor entre el modelo y el
  * mercado sin comisión: escoger lo que el modelo ve más seguro escoge justo donde es más optimista que el mercado.
- * Máximo valor promete el modelo (con él se calcula su valor esperado).
+ * El parlay con valor también promete la menor. Máximo valor promete el modelo (con él se calcula su valor esperado).
  */
-export function promised(leg: Pick<Leg, "p_model" | "p_market">, mode: Mode): number {
-  return mode === "prob" && leg.p_market !== null ? Math.min(leg.p_model, leg.p_market) : leg.p_model;
+export function promised(leg: Pick<Leg, "p_model" | "p_market">, mode: ParlayKind): number {
+  return mode !== "ev" && leg.p_market !== null ? Math.min(leg.p_model, leg.p_market) : leg.p_model;
 }
 
-type Priced = Pick<Leg, "p_model" | "odd" | "book_odds">;
+type Priced = Pick<Leg, "p_model" | "p_market" | "odd" | "book_odds">;
 
-function rawAcceptFrom(leg: Priced, mode: Mode): number | null {
-  return mode === "ev" ? 1 / leg.p_model : (marketOdd(leg.book_odds) ?? leg.odd);
+function rawAcceptFrom(leg: Priced, mode: ParlayKind): number | null {
+  if (mode === "ev") return 1 / leg.p_model;
+  if (mode === "value") return 1 / promised(leg, mode);
+  return marketOdd(leg.book_odds) ?? leg.odd;
 }
 
 /** Redondea hacia arriba a 2 decimales: el momio que se muestra nunca queda abajo del mínimo real. */
@@ -35,24 +40,25 @@ export function ceilOdd(odd: number): number {
 }
 
 /** Qué significa "Acepta desde" en cada modo (texto visible y del title). */
-export const ACCEPT_HELP: Record<Mode, string> = {
+export const ACCEPT_HELP: Record<ParlayKind, string> = {
   prob: "“Acepta desde” es lo que paga el mercado (la mediana de las casas): si tu casa paga menos, pagas más comisión de la normal.",
   ev: "“Acepta desde” es el momio justo del modelo: si tu casa paga menos, ya no hay valor.",
+  value: "“Acepta desde” es el momio con el que el modelo y el mercado ven valor: si tu casa paga menos, ya no lo hay.",
 };
 
 /**
  * "Acepta desde": lo menos que conviene aceptar por una pierna en cualquier casa, esté o no en la API (p. ej.
  * Caliente). Máximo valor: el momio justo del modelo; abajo de él ya no hay valor. Máxima probabilidad: lo que paga el
  * mercado (la mediana de las casas de la API); abajo de él se paga más comisión de la normal. Ahí no sirve el justo:
- * por su comisión, ninguna casa lo paga.
+ * por su comisión, ninguna casa lo paga. Parlay con valor: el mayor de los momios justos del modelo y del mercado.
  */
-export function acceptFrom(leg: Priced, mode: Mode): number | null {
+export function acceptFrom(leg: Priced, mode: ParlayKind): number | null {
   const odd = rawAcceptFrom(leg, mode);
   return odd === null ? null : ceilOdd(odd);
 }
 
 /** "Acepta desde" del parlay completo: el producto del de sus piernas (null si a alguna le falta). */
-export function parlayAcceptFrom(legs: Priced[], mode: Mode): number | null {
+export function parlayAcceptFrom(legs: Priced[], mode: ParlayKind): number | null {
   let product = 1;
   for (const leg of legs) {
     const odd = rawAcceptFrom(leg, mode);
@@ -64,7 +70,7 @@ export function parlayAcceptFrom(legs: Priced[], mode: Mode): number | null {
 
 export interface BuiltParlay {
   n: number;
-  mode: Mode;
+  mode: ParlayKind;
   /** Parlay con una pierna de cada partido que tenga alguna elegible (p. ej. la jornada completa). */
   whole?: boolean;
   legs: Leg[];
@@ -94,6 +100,19 @@ const SCORE: Record<Mode, (l: Leg) => number> = {
   prob: (l) => l.p_model,
   ev: (l) => l.p_model * (l.odd ?? 0),
 };
+
+/**
+ * Parlay del sistema con sus piernas completas (las que la API manda a la cuenta). Cada pierna lleva el modelo y el
+ * mercado con los que se registró: lo que se prometió y midió (las de partidos posteriores siguen cambiando).
+ */
+export function fromSystem(p: SystemParlay, legs: Map<number, Leg>): BuiltParlay | null {
+  const full = p.legs.flatMap((l) => {
+    const leg = legs.get(l.pick_id);
+    return leg ? [{ ...leg, p_model: l.p_model, p_market: l.p_market }] : [];
+  });
+  if (full.length !== p.legs.length) return null;
+  return { n: p.n_legs, mode: p.mode, legs: full, probability: p.probability, odd: p.odd, ev: p.ev, result: p.result };
+}
 
 export function parlayResult(results: Result[]): Result {
   if (results.includes("lost")) return "lost";

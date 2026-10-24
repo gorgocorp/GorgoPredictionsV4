@@ -16,12 +16,11 @@ from pydantic import BaseModel
 
 from app.api.auth import admin_viewer, current_viewer
 from app.api.logos import logo_path
-from app.api.parlays import group_parlays
+from app.api.parlays import DAY_MODES, group_parlays
 from app.api.refresh import refresh_days
 from app.config import LOCAL_TZ
 from app.core.access import gate_projection, visible_legs, visible_parlays
 from app.core.accounts import Viewer
-from app.core.parlay import MODES
 from app.db import connect
 from app.sports.nba.matches import SCHEDULED
 from app.sports.nba.sport import SPORT
@@ -154,7 +153,7 @@ def day_view(day: date, viewer: Viewer = Depends(current_viewer)) -> dict:
     now = datetime.now(LOCAL_TZ)
     with connect() as conn:
         games = conn.execute(GAMES_SQL, (day,)).fetchall()
-        parlay_rows = conn.execute(PARLAYS_SQL, (day, list(MODES))).fetchall()
+        parlay_rows = conn.execute(PARLAYS_SQL, (day, DAY_MODES)).fetchall()
         absences = conn.execute(ABSENCES_SQL, {"day": day}).fetchall()
         report_rows = conn.execute(REPORT_SQL, (day,)).fetchall()
     report_at = report_rows[0]["report_at"] if report_rows else None
@@ -214,7 +213,7 @@ def day_view(day: date, viewer: Viewer = Depends(current_viewer)) -> dict:
             }, viewer.full, now, SCHEDULED)
             for g in games
         ],
-        "parlays": visible_parlays(group_parlays(parlay_rows, "game_id"), viewer.full),
+        "parlays": visible_parlays(group_parlays(parlay_rows, "game_id"), viewer.full, viewer.is_admin),
     }
 
 

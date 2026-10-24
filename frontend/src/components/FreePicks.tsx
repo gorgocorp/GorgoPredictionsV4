@@ -1,22 +1,9 @@
 import type { Leg, SlateGame, SystemParlay } from "../lib/api";
-import { ACCEPT_HELP, type BuiltParlay } from "../lib/builder";
+import { ACCEPT_HELP, fromSystem, type BuiltParlay } from "../lib/builder";
 import type { SportConfig } from "../lib/sports";
 import { Paywall, ParlaysPlaceholder } from "./Locked";
 import { ParlayCard } from "./ParlaysSection";
 import { EmptyState } from "./States";
-
-/**
- * Parlay del sistema con sus piernas completas (las que la API manda a la cuenta). Cada pierna lleva el modelo y el
- * mercado con los que se registró: lo que se prometió y midió (las de partidos posteriores siguen cambiando).
- */
-function toBuilt(p: SystemParlay, legs: Map<number, Leg>): BuiltParlay | null {
-  const full = p.legs.flatMap((l) => {
-    const leg = legs.get(l.pick_id);
-    return leg ? [{ ...leg, p_model: l.p_model, p_market: l.p_market }] : [];
-  });
-  if (full.length !== p.legs.length) return null;
-  return { n: p.n_legs, mode: p.mode, legs: full, probability: p.probability, odd: p.odd, ev: p.ev, result: p.result };
-}
 
 /**
  * Lo que ve una cuenta free en un día: los parlays gratis (máxima probabilidad de 2 y 3 piernas, los que registra
@@ -44,7 +31,7 @@ export function FreePicks({
 }) {
   const byId = new Map(legs.map((l) => [l.id, l]));
   const built = (parlays ?? [])
-    .map((p) => toBuilt(p, byId))
+    .map((p) => fromSystem(p, byId))
     .filter((p): p is BuiltParlay => p !== null)
     .sort((a, b) => a.n - b.n);
 

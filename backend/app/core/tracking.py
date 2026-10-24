@@ -414,13 +414,14 @@ def clv_data(picks: pd.DataFrame) -> tuple[dict | None, dict[str, dict]]:
     return summary, by_market
 
 
-def performance_data(conn: psycopg.Connection, sport: Sport, **filters) -> dict:
+def performance_data(conn: psycopg.Connection, sport: Sport, hidden_modes: Iterable[str] = (), **filters) -> dict:
     """Métricas de rendimiento de los picks liquidados de un deporte (para la API y el reporte de texto).
 
-    `filters` son los del deporte (NBA: include_preseason; fútbol: league).
+    `filters` son los del deporte (NBA: include_preseason; fútbol: league). Los parlays de `hidden_modes` no cuentan
+    (los que la cuenta no ve: app/core/access.py).
     """
     pick_filter, parlay_filter, extra = sport.performance_filters(**filters)
-    params = {"sport": sport.key, **extra}
+    params = {"sport": sport.key, "hidden": list(hidden_modes), **extra}
     picks = pd.DataFrame(
         conn.execute(
             f"""
@@ -452,7 +453,7 @@ def performance_data(conn: psycopg.Connection, sport: Sport, **filters) -> dict:
             f"""
             SELECT p.mode, p.n_legs, p.probability::float AS p, p.settled_odd::float AS odd, p.result = 'won' AS won
             FROM core.parlays p
-            WHERE p.sport = %(sport)s AND p.result IN ('won', 'lost') {parlay_filter}
+            WHERE p.sport = %(sport)s AND p.result IN ('won', 'lost') AND NOT (p.mode = ANY(%(hidden)s)) {parlay_filter}
             """,
             params,
         ).fetchall(),

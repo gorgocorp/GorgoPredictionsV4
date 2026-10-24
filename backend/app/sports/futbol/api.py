@@ -14,12 +14,11 @@ from pydantic import BaseModel
 
 from app.api.auth import admin_viewer, current_viewer
 from app.api.logos import logo_path
-from app.api.parlays import group_parlays
+from app.api.parlays import DAY_MODES, group_parlays
 from app.api.refresh import refresh_days
 from app.config import LOCAL_TZ
 from app.core.access import gate_projection, visible_legs, visible_parlays
 from app.core.accounts import Viewer
-from app.core.parlay import MODES
 from app.db import connect
 from app.sports.futbol.matches import SCHEDULED
 from app.sports.futbol.sport import SPORT
@@ -242,8 +241,8 @@ def _day_filter(day: date) -> dict:
 def day_view(day: date, viewer: Viewer = Depends(current_viewer)) -> dict:
     with connect() as conn:
         games = _games(conn, _day_filter(day), viewer)
-        parlay_rows = conn.execute(PARLAYS_SQL, (day, list(MODES))).fetchall()
-    parlays = visible_parlays(group_parlays(parlay_rows, "fixture_id"), viewer.full)
+        parlay_rows = conn.execute(PARLAYS_SQL, (day, DAY_MODES)).fetchall()
+    parlays = visible_parlays(group_parlays(parlay_rows, "fixture_id"), viewer.full, viewer.is_admin)
     return {"sport": "futbol", "date": day.isoformat(), "games": games, "parlays": parlays}
 
 

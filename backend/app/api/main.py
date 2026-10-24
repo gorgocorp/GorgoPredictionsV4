@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from app.api import admin, auth, featured, logos, results
 from app.api.auth import current_viewer, full_viewer
 from app.config import BOOKMAKER, LOCAL_TZ, PRICE_BOOKMAKERS, SHARP_BOOKMAKER
-from app.core.access import free_visible_picks, lock_legs
+from app.core.access import free_visible_picks, hidden_modes, lock_legs
 from app.core.accounts import Viewer
 from app.core.bets import BetError, LegInput, SingleInput, create_bet, create_singles, delete_bet, list_bets
 from app.core.evidence import parlay_profit, summarize
@@ -33,6 +33,8 @@ from app.core.featured import FEATURED_MODES
 from app.core.parlay import MODES
 from app.core.sport import Sport
 from app.core.tracking import performance_data
+from app.core.value import MODE as VALUE_MODE
+from app.core.value import value_performance
 from app.db import connect
 from app.sports import all_sports
 from app.sports.futbol import api as futbol_api
@@ -86,8 +88,8 @@ def meta() -> dict:
 # ---------------------------------------------------------------- historial (evidencias)
 
 RESULT_FILTERS = ("won", "lost", "void", "pending")
-# Parlays del día y destacados (de la semana y de fin de semana).
-PARLAY_MODES = (*MODES, *FEATURED_MODES)
+# Parlays del día, destacados (de la semana y de fin de semana) y el parlay con valor (en prueba: sólo admin).
+PARLAY_MODES = (*MODES, *FEATURED_MODES, VALUE_MODE)
 
 
 def _history_sql(sports: dict[str, Sport]) -> str:
@@ -106,6 +108,7 @@ def _history_sql(sports: dict[str, Sport]) -> str:
           AND p.day BETWEEN %(desde)s AND %(hasta)s
           AND (%(mode)s::text IS NULL OR p.mode = %(mode)s)
           AND (%(n_legs)s::int IS NULL OR p.n_legs = %(n_legs)s)
+          AND NOT (p.mode = ANY(%(hidden)s))
         GROUP BY p.id
     )
     SELECT * FROM info
@@ -127,7 +130,7 @@ WHERE k.sport = %s AND l.parlay_id = ANY(%s)
 """
 
 
-def _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason) -> list[dict]:
+def _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason, viewer: Viewer) -> list[dict]:
     if sport is not None:
         _sport(sport)
     if mode not in (None, *PARLAY_MODES):
@@ -144,6 +147,7 @@ def _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_prese
             "n_legs": n_legs,
             "result": result,
             "preseason": include_preseason,
+            "hidden": list(hidden_modes(viewer.is_admin)),
         },
     ).fetchall()
 
@@ -200,7 +204,7 @@ def history(
     """
     limit = max(1, min(limit, 100))
     with connect() as conn:
-        rows = _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason)
+        rows = _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason, viewer)
         page = rows[offset : offset + limit]
         legs = _history_legs(conn, page, viewer) if page else {}
     return {
@@ -222,7 +226,13 @@ def history(
 
 
 RESULT_ES = {"won": "ganado", "lost": "perdido", "void": "anulado", None: "pendiente"}
-MODE_ES = {"prob": "máxima probabilidad", "ev": "máximo valor", "week": "de la semana", "weekend": "de fin de semana"}
+MODE_ES = {
+    "prob": "máxima probabilidad",
+    "ev": "máximo valor",
+    "week": "de la semana",
+    "weekend": "de fin de semana",
+    "value": "con valor (prueba)",
+}
 
 
 @api.get("/api/history.csv")
@@ -239,7 +249,7 @@ def history_csv(
     """El mismo historial en CSV, una fila por pierna (abre bien en Excel). Con plan completo."""
     sports = _sports()
     with connect() as conn:
-        rows = _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason)
+        rows = _history_rows(conn, sport, desde, hasta, mode, n_legs, result, include_preseason, viewer)
         legs = _history_legs(conn, rows, viewer) if rows else {}
     out = io.StringIO()
     out.write("﻿")  # BOM: Excel reconoce los acentos
@@ -362,12 +372,19 @@ def remove_bet(bet_id: int, viewer: Viewer = Depends(current_viewer)) -> dict:
 
 
 @api.get("/api/performance")
-def performance(sport: str, include_preseason: bool = False, league: int | None = None) -> dict:
-    """Rendimiento de un deporte. NBA: sin pretemporada salvo `include_preseason`; fútbol: `league` opcional."""
+def performance(
+    sport: str, include_preseason: bool = False, league: int | None = None, viewer: Viewer = Depends(current_viewer)
+) -> dict:
+    """Rendimiento de un deporte. NBA: sin pretemporada salvo `include_preseason`; fútbol: `league` opcional.
+
+    Admin además recibe la prueba del parlay con valor (`value`); a los demás no les llegan sus parlays.
+    """
     s = _sport(sport)
     filters = {"include_preseason": include_preseason} if s.key == "nba" else {"league": league}
     with connect() as conn:
-        return performance_data(conn, s, **filters)
+        data = performance_data(conn, s, hidden_modes(viewer.is_admin), **filters)
+        data["value"] = value_performance(conn, s) if viewer.is_admin else None
+    return data
 
 
 app.include_router(api)

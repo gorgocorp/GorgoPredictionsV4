@@ -7,6 +7,9 @@ Una cuenta con plan completo (admin o suscripción vigente) ve todo. Una cuenta 
 - cualquier pierna de un partido que ya empezó o ya no está programado (no se puede apostar: es evidencia, no un
   pick). Un partido con horario por definir (TBD) sigue programado.
 Lo demás no sale de la API: la interfaz recibe sólo un aviso de que existe y lo muestra difuminado.
+
+Los parlays en prueba (ADMIN_ONLY_MODES: el parlay con valor, app/core/value.py) sólo los ve admin: no le llegan a
+nadie más en la página del día, el historial ni el rendimiento.
 """
 
 from datetime import datetime
@@ -14,9 +17,16 @@ from datetime import datetime
 import psycopg
 
 from app.core.featured import FEATURED_MODES
+from app.core.value import MODE as VALUE_MODE
 
 FREE_MODE = "prob"
 FREE_SIZES = (2, 3)
+ADMIN_ONLY_MODES = (VALUE_MODE,)
+
+
+def hidden_modes(admin: bool) -> tuple[str, ...]:
+    """Modos de parlay que la cuenta no ve en ningún lado."""
+    return () if admin else ADMIN_ONLY_MODES
 
 
 def is_free_parlay(mode: str, n_legs: int) -> bool:
@@ -50,9 +60,10 @@ def visible_legs(conn: psycopg.Connection, legs: list[dict], full: bool, now: da
     return [leg for leg in legs if leg["id"] in visible]
 
 
-def visible_parlays(parlays: list[dict], full: bool) -> list[dict]:
-    """Parlays del sistema que ve la cuenta (free: sólo los gratis y los destacados)."""
-    return parlays if full else [p for p in parlays if is_free_parlay(p["mode"], p["n_legs"])]
+def visible_parlays(parlays: list[dict], full: bool, admin: bool = False) -> list[dict]:
+    """Parlays del sistema que ve la cuenta (free: sólo los gratis y los destacados; los de prueba, sólo admin)."""
+    hidden = hidden_modes(admin)
+    return [p for p in parlays if p["mode"] not in hidden and (full or is_free_parlay(p["mode"], p["n_legs"]))]
 
 
 LOCKED_LEG_KEYS = ("position", "sport", "competition", "matchup", "starts_at")

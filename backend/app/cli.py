@@ -272,13 +272,25 @@ def cmd_featured(args) -> None:
             print(f"{sport.label}: {n} parlays destacados publicados" if n else f"{sport.label}: nada que publicar ahora")
 
 
+def cmd_value(args) -> None:
+    from app.core.value import publish_value
+
+    with connect() as conn:
+        for sport in _selected(args):
+            n = publish_value(conn, sport)
+            print(f"{sport.label}: {n} parlays con valor publicados" if n else f"{sport.label}: nada que publicar ahora")
+
+
 def cmd_performance(args) -> None:
     from app.core.tracking import performance_report
+    from app.core.value import value_report
 
     sport = _one(args)
     filters = {"include_preseason": args.include_preseason} if sport.key == "nba" else {"league": args.league}
     with connect() as conn:
         print(performance_report(conn, sport, **filters))
+        print()
+        print(value_report(conn, sport))
 
 
 BACKTEST_RANGES = {"nba": ("2025-10-21", "2026-06-14"), "futbol": ("2025-08-15", "2026-06-01")}
@@ -386,6 +398,9 @@ def main() -> None:
     with_sport(
         sub.add_parser("featured", help="Publica los parlays de la semana y de fin de semana que ya toquen (lo hace el scheduler)")
     ).set_defaults(func=cmd_featured)
+    with_sport(
+        sub.add_parser("value", help="Publica el parlay con valor de los días que ya toquen (en prueba; lo hace el scheduler)")
+    ).set_defaults(func=cmd_value)
 
     p = with_sport(sub.add_parser("performance", help="Rendimiento real de los picks registrados"), "Deporte (obligatorio)")
     p.add_argument("--include-preseason", action="store_true", help="NBA: incluir la pretemporada")

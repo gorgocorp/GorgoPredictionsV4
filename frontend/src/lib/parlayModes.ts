@@ -6,4 +6,5 @@ export const PARLAY_MODES: Record<ParlayMode, { label: string; short: string }> 
   ev: { label: "Máximo valor", short: "Máx. valor" },
   week: { label: "Parlay de la semana", short: "De la semana" },
   weekend: { label: "Parlay de fin de semana", short: "Fin de semana" },
+  value: { label: "Parlay con valor (prueba)", short: "Con valor (prueba)" },
 };

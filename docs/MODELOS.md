@@ -4,6 +4,46 @@ Registro de los cambios intencionales al cálculo de probabilidades. Cada uno su
 (`app/sports/<deporte>/engine/tracking.py`), que se guarda en cada pick, parlay y proyección para separar el
 rendimiento de cada versión. `v1` es el motor copiado de los proyectos anteriores (paridad del 6-oct-2026).
 
+## Parlay con valor, en prueba y sólo para admin (desde el 24-oct-2026)
+
+No cambia ningún modelo ni lo que ven los demás: `MODEL_VERSION` no sube y `parity` no cambia. Es un parlay nuevo
+(`app/core/value.py`, modo `value`, migración 0009) que se registra y se mide con una regla fija, escrita aquí antes de
+ver un solo resultado.
+
+**Por qué.** Revisión del 23-oct-2026 con las piernas ya jugadas, el momio de Bet365 al publicarse y el cierre de
+Pinnacle (momios menores a 10). Con las etiquetas del boleto:
+
+| Fútbol | Piernas | Modelo | Mercado | Real | CLV |
+|---|---:|---:|---:|---:|---:|
+| Sólo el modelo ve valor | 3,348 | 56.7% | 48.8% | 48.7% | −5.3% |
+| Valor (modelo y mercado) | 301 | 34.5% | 30.1% | 29.2% | +3.6% (63% le ganan al cierre) |
+| Sin valor | 9,524 | 55.5% | 58.0% | 58.2% | −7.0% |
+
+En NBA (17 partidos de temporada regular), "sólo el modelo": modelo 60.0%, mercado 50.2%, real 52.1%, CLV −5.8%.
+Cuando sólo el modelo ve valor, lo que pasa queda donde decía el mercado; el CLV positivo aparece cuando la casa paga
+más que el precio justo del mercado. Con momio menor a 3 hubo 99 piernas así en fútbol (unas 7 por día), con CLV de
+cerca de +4.7% y ganancia de +11% (muestra chica). Ninguno de los 167 parlays sugeridos del 19 al 23-oct tenía todas
+sus piernas con valor: se arman con la probabilidad o el valor del modelo, no con el precio.
+
+**La regla** (fija desde el 24-oct-2026; si cambia, lo nuevo se cuenta aparte):
+- Una vez por día y deporte, desde las 20:00 (hora local) del día anterior; si a esa hora no hay dos piernas que
+  cumplan la regla, se reintenta en cada corrida mientras queden partidos. Ya publicado no cambia.
+- Cada pierna: partido del día que empieza al menos 3.5 h después de publicarse (su cierre, a lo más 90 min antes del
+  inicio, queda al menos 2 h después y su CLV se puede medir), una por partido; mercado de partido (sin props) que el
+  mercado cotiza completo; momio de Bet365 menor a 3; momio × la menor entre modelo y mercado > 1; a no más de 20% del
+  precio justo del mercado (más lejos casi siempre es un dato malo).
+- Dos piernas: las que más se prometen (la menor entre modelo y mercado). "Acepta desde" de este parlay: el mayor de
+  los dos momios justos.
+
+**Cómo se mide.** Resultados del parlay (ganados contra esperados y ROI con el momio de Bet365) y CLV de sus piernas:
+momio publicado × probabilidad sin comisión de Pinnacle al cierre − 1, con las mismas reglas que el CLV de Rendimiento.
+Lo ven sólo admin (página del día, Historial, Rendimiento) y `performance` en la línea de comandos.
+
+**Cuándo se decide** (propuesta, antes de ver resultados): a las 4 semanas y con al menos 100 piernas medibles. Se abre
+a suscriptores si el CLV promedio y la mediana de sus piernas son positivos; si no, se descarta o se cambia la regla y
+la prueba empieza de cero. La ganancia se reporta pero no decide: con un parlay diario por deporte, 4 semanas son muy
+pocos parlays para que deje de ser suerte.
+
 ## Máxima probabilidad: se escoge con el modelo y se promete la menor entre modelo y mercado (19-oct-2026)
 
 No cambia ningún modelo: las piernas y su probabilidad (`p_model`) son las mismas, así que `MODEL_VERSION` no sube y

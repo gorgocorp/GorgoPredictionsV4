@@ -61,8 +61,8 @@ export function ParlayCard({
   title?: string;
 }) {
   const notify = useToast();
-  // Máxima probabilidad promete la menor entre modelo y mercado; máximo valor, el modelo.
-  const capped = parlay.mode === "prob";
+  // Máxima probabilidad y el parlay con valor prometen la menor entre modelo y mercado; máximo valor, el modelo.
+  const capped = parlay.mode !== "ev";
   const minimum = parlayAcceptFrom(parlay.legs, parlay.mode);
 
   const load = () => {
@@ -107,7 +107,7 @@ export function ParlayCard({
             {minimum ? minimum.toFixed(2) : "—"}
           </span>
         </div>
-        {capped ? (
+        {parlay.mode === "prob" ? (
           <div className="stat">
             <span className="stat-label">Momio justo</span>
             <span className="stat-value" title="Sin comisión: por su comisión, ninguna casa lo paga">

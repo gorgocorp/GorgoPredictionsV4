@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Leg, SportKey } from "./api";
-import { acceptFrom, buildParlays, buildWhole, isEligible, parlayAcceptFrom, parlayResult, promised } from "./builder";
+import type { Leg, SportKey, SystemParlay } from "./api";
+import { acceptFrom, buildParlays, buildWhole, fromSystem, isEligible, parlayAcceptFrom, parlayResult, promised } from "./builder";
 import { defaultPreferences, isAllowed, isDefault, type Preferences } from "./preferences";
 
 let nextId = 1;
@@ -280,6 +280,37 @@ describe("acepta desde", () => {
     expect(parlayAcceptFrom(legs, "ev")).toBe(1.79); // 1 / (0.7 × 0.8) = 1.7857
     expect(parlayAcceptFrom(legs, "prob")).toBe(2.1); // 1.5 × 1.4
     expect(parlayAcceptFrom([...legs, leg({ odd: null, book_odds: null })], "prob")).toBeNull();
+  });
+
+  it("parlay con valor: el mayor de los momios justos del modelo y del mercado", () => {
+    // Modelo 80% (justo 1.25), mercado 70% (justo 1.43): abajo de 1.43 el mercado ya no ve valor.
+    const l = leg({ p_model: 0.8, p_market: 0.7, odd: 1.48 });
+    expect(promised(l, "value")).toBe(0.7);
+    expect(acceptFrom(l, "value")).toBe(1.43);
+    expect(acceptFrom(leg({ p_model: 0.6, p_market: 0.65, odd: 1.7 }), "value")).toBe(1.67); // aquí el menor es el modelo
+    expect(parlayAcceptFrom([l, leg({ p_model: 0.66, p_market: 0.63, odd: 1.62 })], "value")).toBe(2.27); // 1/(0.7 × 0.63)
+  });
+});
+
+describe("fromSystem", () => {
+  it("usa el modelo y el mercado con los que se registró cada pierna", () => {
+    const today = legOf("futbol", { p_model: 0.9, p_market: 0.85 });
+    const parlay: SystemParlay = {
+      id: 1,
+      mode: "value",
+      n_legs: 1,
+      probability: 0.63,
+      odd: 1.62,
+      ev: 0.0206,
+      result: null,
+      settled_odd: null,
+      evaluated_at: "2026-10-24T02:00:00Z",
+      legs: [{ pick_id: today.id, match_id: 1, market: "total", description: "pierna", p_model: 0.66, p_market: 0.63, odd: 1.62, result: null }],
+    };
+    const built = fromSystem(parlay, new Map([[today.id, today]]));
+    expect(built?.mode).toBe("value");
+    expect(built?.legs.map((l) => [l.p_model, l.p_market])).toEqual([[0.66, 0.63]]);
+    expect(fromSystem(parlay, new Map())).toBeNull(); // falta una pierna: no se arma a medias
   });
 });
 

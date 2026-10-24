@@ -8,6 +8,10 @@ from app.sports.futbol.matches import sync_matches as sync_futbol
 from app.sports.nba.matches import sync_matches as sync_nba
 from tests.integration.helpers import STARTS, add_futbol_fixture, add_nba_game, add_pick, match_id, owner_id
 
+# Las apuestas se registran antes de su primer partido (user_bets_before_start): con now() la prueba dejaría de pasar
+# en cuanto STARTS quedara en el pasado.
+BEFORE_START = "2026-10-20T12:00:00+00:00"
+
 
 def test_same_provider_ids_in_both_sports_are_different_matches(db):
     # El equipo 132 y el partido 1000 existen en los dos proveedores y no son lo mismo.
@@ -137,9 +141,9 @@ def test_one_bet_can_mix_nba_and_futbol_legs(db):
     bet = db.execute(
         """
         INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, created_at, first_start)
-        VALUES (%s, 'Caliente', 100, 3.2, 0.36, now(), %s) RETURNING id
+        VALUES (%s, 'Caliente', 100, 3.2, 0.36, %s, %s) RETURNING id
         """,
-        (owner_id(db), STARTS),
+        (owner_id(db), BEFORE_START, STARTS),
     ).fetchone()["id"]
     for position, pick in enumerate((nba_pick, futbol_pick), 1):
         db.execute(
@@ -197,16 +201,16 @@ def test_every_bet_has_an_owner_that_cannot_be_deleted(db):
             db.execute(
                 """
                 INSERT INTO core.user_bets (bookmaker, stake, odd, model_probability, created_at, first_start)
-                VALUES ('Caliente', 100, 2.0, 0.5, now(), %s)
+                VALUES ('Caliente', 100, 2.0, 0.5, %s, %s)
                 """,
-                (STARTS,),
+                (BEFORE_START, STARTS),
             )
     db.execute(
         """
         INSERT INTO core.user_bets (user_id, bookmaker, stake, odd, model_probability, created_at, first_start)
-        VALUES (%s, 'Caliente', 100, 2.0, 0.5, now(), %s)
+        VALUES (%s, 'Caliente', 100, 2.0, 0.5, %s, %s)
         """,
-        (owner_id(db), STARTS),
+        (owner_id(db), BEFORE_START, STARTS),
     )
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         with db.transaction():

@@ -5,7 +5,7 @@ import { api, type League, type Leg, type SlateGame, type SystemParlay } from ".
 import { withPrices } from "../lib/books";
 import { longDate } from "../lib/format";
 import { usePreferences } from "../lib/preferences";
-import { useViewer } from "../lib/session";
+import { isAdmin, useViewer } from "../lib/session";
 import type { SportConfig } from "../lib/sports";
 import { BetSlip } from "./BetSlip";
 import { FreePicks } from "./FreePicks";
@@ -14,6 +14,7 @@ import { ParlaysSection } from "./ParlaysSection";
 import { PreferencesPanel } from "./PreferencesPanel";
 import { SinglesSection } from "./SinglesSection";
 import { EmptyState, ErrorState, Skeleton, SkeletonCards } from "./States";
+import { ValueParlay } from "./ValueParlay";
 
 /** Lo que usamos de una consulta de React Query. */
 export interface QueryState<T> {
@@ -239,6 +240,16 @@ export function SlateBody<G extends SlateGame>({
             />
           ) : (
             <>
+              {isAdmin(viewer) && parlays && (
+                <ValueParlay
+                  config={config}
+                  parlays={parlays}
+                  legs={legsQuery.data ?? []}
+                  games={games}
+                  bookmaker={bookmaker}
+                  date={slipDate}
+                />
+              )}
               <ParlaysSection
                 config={config}
                 legs={shownLegs}

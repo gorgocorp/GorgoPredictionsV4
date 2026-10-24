@@ -19,6 +19,7 @@ herramientas del navegador. Lo que la interfaz muestra difuminado es relleno gen
 | Descargar CSV del historial | 🔒 | ✅ | ✅ |
 | Rendimiento y CLV | ✅ | ✅ | ✅ |
 | Mis apuestas (cada quien las suyas; parlay o individuales) | ✅ sólo con piernas que ve | ✅ | ✅ |
+| Parlay con valor (en prueba: página del día, Historial y Rendimiento) | — | — | ✅ |
 | Recalcular, marcar bajas | — | — | ✅ |
 | Usuarios (crear, plan, vencimiento, contraseña, desactivar) | — | — | ✅ |
 
@@ -28,6 +29,8 @@ herramientas del navegador. Lo que la interfaz muestra difuminado es relleno gen
 - Un suscriptor ve todo hasta el último día de su suscripción, en hora local (`subscription_until`, incluido); sin
   fecha no vence. Al vencer ve lo mismo que free, sin cambiar su rol.
 - Recalcular y marcar bajas cambian los picks que todos ven y que mide el historial: sólo el admin.
+- El parlay con valor está en prueba (`docs/MODELOS.md`): la API no se lo manda a nadie más que a admin
+  (`ADMIN_ONLY_MODES` en `app/core/access.py`), ni en el día, ni en el historial (tampoco el CSV), ni en el rendimiento.
 
 ## Página pública de resultados (sin cuenta)
 

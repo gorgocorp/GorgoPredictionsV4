@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { EmptyState, ErrorState, Skeleton } from "../components/States";
-import { api, type CalibrationBin, type ClvSummary, type Performance, type PerformanceFilters } from "../lib/api";
+import { api, type CalibrationBin, type ClvSummary, type Performance, type PerformanceFilters, type ValueTrial } from "../lib/api";
 import { BACKTESTS } from "../lib/backtest";
 import { clvExclusions } from "../lib/clv";
-import { pct, signedPct, signedPts } from "../lib/format";
+import { longDate, pct, signedPct, signedPts } from "../lib/format";
 import { PARLAY_MODES } from "../lib/parlayModes";
 import { useSportContext } from "../lib/sportContext";
 import { SPORT_KEYS, SPORTS, type SportConfig } from "../lib/sports";
@@ -184,6 +184,60 @@ function ClvSection({ data }: { data: Performance }) {
   );
 }
 
+/** La prueba del parlay con valor (sólo le llega a admin): su regla fija, sus resultados y el CLV de sus piernas. */
+function ValueTrialSection({ trial }: { trial: ValueTrial }) {
+  const { record: r, clv: c, rules } = trial;
+  const n = (count: number) => count.toLocaleString("es-MX");
+  const skipped = [
+    c.excluded.no_close && `${n(c.excluded.no_close)} sin lectura de cierre`,
+    c.excluded.no_reference && `${n(c.excluded.no_reference)} sin Pinnacle al cierre`,
+    c.excluded.short_window && `${n(c.excluded.short_window)} publicadas a menos de 2 h del cierre`,
+  ].filter(Boolean);
+  return (
+    <section className="card card-pad" aria-labelledby="value-trial-title">
+      <h2 id="value-trial-title">
+        Parlay con valor <span className="badge badge-live">Prueba · sólo admin</span>
+      </h2>
+      <p className="muted small">
+        Regla fija desde el {longDate(trial.since).toLowerCase().replace(",", "")}: {rules.n_legs} piernas en las que la casa paga más que el momio justo
+        del modelo y del mercado, con momio menor a {rules.max_odd} y a no más de {pct(rules.max_price_gap)} del justo del
+        mercado; se publica desde las {rules.publish_hour}:00 del día anterior, con partidos que empiezan al menos{" "}
+        {rules.min_lead_hours} h después, y ya no cambia. El CLV compara el momio publicado contra Pinnacle al cierre: es la
+        señal más rápida; la ganancia tarda cientos de apuestas en dejar de ser suerte.
+      </p>
+      <div className="kpis">
+        <div className="stat">
+          <span className="stat-label">Parlays</span>
+          <span className="kpi-value">{r.parlays}</span>
+          <span className="muted xs">
+            {r.won} de {r.settled} ganados · esperados {r.expected_wins.toFixed(1)} · {r.pending}{" "}
+            {r.pending === 1 ? "pendiente" : "pendientes"}
+          </span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">ROI</span>
+          <span className={`kpi-value ${r.roi !== null && r.roi > 0 ? "ev-pos" : ""}`}>{signedPct(r.roi)}</span>
+          <span className="muted xs">{r.with_odds} con momio</span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">CLV de sus piernas</span>
+          <span className={`kpi-value ${c.avg !== null && c.avg > 0 ? "ev-pos" : ""}`}>{signedPct(c.avg)}</span>
+          <span className="muted xs">
+            {c.n > 0
+              ? `${pct(c.beat_rate)} le ganan al cierre · mediana ${signedPct(c.median)} · ${n(c.n)} piernas`
+              : "Todavía ninguna pierna medible"}
+          </span>
+        </div>
+      </div>
+      {skipped.length > 0 && (
+        <p className="muted xs" style={{ marginBottom: 0 }}>
+          No cuentan en el CLV: {skipped.join(" · ")}.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ByMarket({ data, config }: { data: Performance; config: SportConfig }) {
   if (data.by_market.length === 0) return null;
   return (
@@ -324,6 +378,7 @@ export function PerformancePage() {
         <>
           <Kpis data={perf.data} />
           <ClvSection data={perf.data} />
+          {perf.data.value && <ValueTrialSection trial={perf.data.value} />}
           <ByMarket data={perf.data} config={config} />
           <div className="perf-grid">
             <section className="card card-pad" aria-labelledby="calib-title">

@@ -9,7 +9,8 @@
   pronto y registro de hoy y mañana, para que cada pick quede con el último momio y la probabilidad
   del mercado previos al partido (el cierre del CLV).
 - Después de registrar, publica los parlays destacados que ya toquen (el de la semana el lunes y el de fin de
-  semana el jueves: app/core/featured.py), una sola vez cada uno.
+  semana el jueves: app/core/featured.py) y el parlay con valor de cada día (en prueba: app/core/value.py), una
+  sola vez cada uno.
 - Cada deporte corre aislado: si uno falla (p. ej. venció su plan de la API), los demás siguen.
 """
 
@@ -102,6 +103,7 @@ def run_once(sports: Mapping[str, Sport], due: Mapping[str, str], last_full: dic
     """Una corrida: sincroniza los deportes que tocan, liquida todo y registra sus picks."""
     from app.core.featured import publish_featured
     from app.core.tracking import record_upcoming, settle_all
+    from app.core.value import publish_value
 
     started = datetime.now(timezone.utc)
     record_days: dict[str, int] = {}
@@ -139,6 +141,11 @@ def run_once(sports: Mapping[str, Sport], due: Mapping[str, str], last_full: dic
                 publish_featured(conn, sport)
         except Exception:
             log.exception("%s: la publicación de los parlays destacados falló; se reintenta en la siguiente corrida", sport.label)
+        try:
+            with connect() as conn:
+                publish_value(conn, sport)
+        except Exception:
+            log.exception("%s: la publicación del parlay con valor falló; se reintenta en la siguiente corrida", sport.label)
 
 
 def run_forever(sports: Mapping[str, Sport]) -> None:
