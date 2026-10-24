@@ -834,6 +834,10 @@ table.data td.wrap {
   width: 84px;
   min-height: 32px;
 }
+.slip-market {
+  display: block;
+  margin-top: var(--space-1);
+}
 .slip-totals {
   display: grid;
   grid-template-columns: 1fr 1fr;

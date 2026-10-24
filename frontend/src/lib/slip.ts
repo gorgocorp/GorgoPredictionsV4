@@ -13,6 +13,12 @@ export interface SlipLeg {
   matchup: string;
   description: string;
   pModel: number;
+  /**
+   * Probabilidad sin comisión del mercado que traía la pierna al agregarla (en los destacados, la de cuando se
+   * publicaron); null si ninguna casa cotiza su mercado completo. Falta en los boletos guardados antes de que el
+   * boleto la guardara.
+   */
+  pMarket?: number | null;
   odd: number | null;
   /** Momios de las casas de la API (para llenar solo el momio si tu casa es una de ellas). */
   bookOdds?: Record<string, number> | null;
@@ -51,6 +57,7 @@ export function toSlipLeg(config: SportConfig, leg: Leg, game: SlateGame | undef
     matchup: matchupOf(config, game),
     description: leg.description,
     pModel: leg.p_model,
+    pMarket: leg.p_market,
     odd: leg.odd,
     bookOdds: leg.book_odds,
   };
@@ -75,13 +82,21 @@ function parseStakes(raw: unknown): Record<number, number> {
   );
 }
 
+/** Probabilidad del mercado guardada: un número entre 0 y 1, null (sin mercado) o nada (boleto anterior). */
+function parseMarket(raw: unknown): number | null | undefined {
+  if (raw === null) return null;
+  return typeof raw === "number" && raw > 0 && raw < 1 ? raw : undefined;
+}
+
 /** Boleto guardado en el navegador; descarta piernas incompletas (p. ej. de otra versión). */
 export function parseSlip(raw: unknown): SlipState | null {
   const parsed = raw as SlipState;
   if (!Array.isArray(parsed?.legs)) return null;
-  const legs = parsed.legs.filter(
-    (l) => l && Number.isInteger(l.pickId) && Number.isInteger(l.matchId) && asSport(l.sport) !== null && typeof l.description === "string",
-  );
+  const legs = parsed.legs
+    .filter(
+      (l) => l && Number.isInteger(l.pickId) && Number.isInteger(l.matchId) && asSport(l.sport) !== null && typeof l.description === "string",
+    )
+    .map((l) => ({ ...l, pMarket: parseMarket(l.pMarket) }));
   return {
     legs,
     stake: Number(parsed.stake) || EMPTY.stake,

@@ -80,6 +80,7 @@ describe("parlays destacados", () => {
       matchup: "América vs Chivas",
       description: "Menos de 4.5 goles",
       pModel: 0.82,
+      pMarket: 0.76,
       odd: 1.3,
       bookOdds: { Bet365: 1.3, "1xBet": 1.33 },
     });

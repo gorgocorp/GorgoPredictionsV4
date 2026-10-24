@@ -79,4 +79,19 @@ describe("boleto", () => {
     });
     expect(parseSlip({ nada: true })).toBeNull();
   });
+
+  it("al leer lo guardado conserva el mercado de cada pierna y descarta valores no válidos", () => {
+    const legs = parseSlip({
+      legs: [
+        { ...leg, pMarket: 0.62 },
+        { ...leg, pickId: 2, pMarket: null },
+        { ...leg, pickId: 3, pMarket: "0.6" },
+        { ...leg, pickId: 4, pMarket: 1.2 },
+        { ...leg, pickId: 5 },
+      ],
+      stake: 50,
+    })?.legs;
+    // null: la pierna no tiene mercado; sin dato: boleto guardado antes de que el boleto lo guardara.
+    expect(legs?.map((l) => l.pMarket)).toEqual([0.62, null, undefined, undefined, undefined]);
+  });
 });

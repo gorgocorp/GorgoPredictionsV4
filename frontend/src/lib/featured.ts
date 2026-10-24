@@ -51,6 +51,7 @@ export function toSlipLegs(p: FeaturedParlay): SlipLeg[] {
     matchup: l.matchup,
     description: l.description,
     pModel: l.p_model,
+    pMarket: l.p_market,
     odd: l.odd,
     bookOdds: l.book_odds,
   }));

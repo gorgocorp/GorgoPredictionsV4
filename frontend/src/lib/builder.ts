@@ -30,7 +30,7 @@ function rawAcceptFrom(leg: Priced, mode: Mode): number | null {
 }
 
 /** Redondea hacia arriba a 2 decimales: el momio que se muestra nunca queda abajo del mínimo real. */
-function ceilOdd(odd: number): number {
+export function ceilOdd(odd: number): number {
   return Math.ceil(odd * 100 - 1e-9) / 100;
 }
 

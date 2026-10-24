@@ -29,3 +29,17 @@ export function verdict(pModel: number, pBook: number): Verdict {
   if (diff >= 2) return "value";
   return "none";
 }
+
+/** Quién ve valor en el momio de tu casa: el modelo y el mercado, sólo uno, ninguno, o no hay mercado con qué comparar. */
+export type LegValue = "value" | "model_only" | "market_only" | "none" | "no_market";
+
+/** Hay valor si el momio de la casa paga más que el momio justo (1 / probabilidad) del modelo y del mercado. */
+export function legValue(pModel: number, pMarket: number | null | undefined, odd: number): LegValue {
+  if (pMarket == null) return "no_market";
+  const model = pModel * odd > 1;
+  const market = pMarket * odd > 1;
+  if (model && market) return "value";
+  if (model) return "model_only";
+  if (market) return "market_only";
+  return "none";
+}

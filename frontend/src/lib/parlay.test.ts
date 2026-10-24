@@ -32,6 +32,21 @@ describe("summarize", () => {
     ]);
     expect(s.sameGame).toEqual([1]);
   });
+
+  it("multiplica las probabilidades del mercado; sin la de alguna pierna, no hay", () => {
+    const priced = summarize([
+      { matchId: 1, pModel: 0.8, pMarket: 0.75, odd: null },
+      { matchId: 2, pModel: 0.7, pMarket: 0.6, odd: null },
+    ]);
+    expect(priced.marketProbability).toBeCloseTo(0.45);
+    const missing = summarize([
+      { matchId: 1, pModel: 0.8, pMarket: 0.75, odd: null },
+      { matchId: 2, pModel: 0.7, pMarket: null, odd: null },
+      { matchId: 3, pModel: 0.7, odd: null },
+    ]);
+    expect(missing.marketProbability).toBeNull();
+    expect(summarize([]).marketProbability).toBeNull();
+  });
 });
 
 describe("payout y momios americanos", () => {
@@ -69,5 +84,21 @@ describe("summarizeSingles", () => {
     expect(s.payoutAll).toBeNull();
     expect(s.expectedProfit).toBeNull();
     expect(s.staked).toBe(150);
+  });
+
+  it("con el mercado: aciertos y ganancia esperada; null si a alguna le falta", () => {
+    const s = summarizeSingles([
+      { pModel: 0.8, pMarket: 0.74, odd: 1.3, stake: 100 },
+      { pModel: 0.6, pMarket: 0.45, odd: 2.0, stake: 50 },
+    ]);
+    expect(s.expectedWinsMarket).toBeCloseTo(1.19);
+    expect(s.expectedProfitMarket).toBeCloseTo(100 * (0.74 * 1.3 - 1) + 50 * (0.45 * 2 - 1));
+    const missing = summarizeSingles([
+      { pModel: 0.8, pMarket: 0.74, odd: 1.3, stake: 100 },
+      { pModel: 0.6, pMarket: null, odd: 2.0, stake: 50 },
+    ]);
+    expect(missing.expectedWinsMarket).toBeNull();
+    expect(missing.expectedProfitMarket).toBeNull();
+    expect(missing.expectedProfit).not.toBeNull();
   });
 });
