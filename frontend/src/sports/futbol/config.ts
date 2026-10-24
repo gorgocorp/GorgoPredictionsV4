@@ -1,5 +1,6 @@
 import { relativeTime, shortTeam } from "../../lib/format";
 import type { SportConfig } from "../../lib/sports";
+import { futbolApi } from "./api";
 
 export const STATUS_LABELS: Record<string, string> = {
   TBD: "Por definir",
@@ -102,4 +103,6 @@ export const FUTBOL: SportConfig = {
   newsExamples: "baja, rotación",
   dataJobs: ["details", "fixtures"],
   syncLines: (m) => [`Bajas reportadas: ${relativeTime(m.last_injuries_at)}`, `${m.leagues?.length ?? 0} ligas`],
+  loadDay: futbolApi.day,
+  loadLegs: futbolApi.legs,
 };

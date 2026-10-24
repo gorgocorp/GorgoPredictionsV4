@@ -188,6 +188,7 @@ export function Header() {
         <NavLink to="/historial">Historial</NavLink>
         <NavLink to="/mis-apuestas">Mis apuestas</NavLink>
         <NavLink to={`/rendimiento?deporte=${sport}`}>Rendimiento</NavLink>
+        {isAdmin(viewer) && <NavLink to={`/calculadora?deporte=${sport}`}>Calculadora</NavLink>}
         {isAdmin(viewer) && <NavLink to="/usuarios">Usuarios</NavLink>}
       </nav>
       <div className="header-right">

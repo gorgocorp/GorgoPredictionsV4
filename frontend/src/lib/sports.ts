@@ -1,6 +1,6 @@
 import { FUTBOL } from "../sports/futbol/config";
 import { NBA } from "../sports/nba/config";
-import type { SportKey, SportMeta } from "./api";
+import type { Leg, SlateGame, SportKey, SportMeta, SystemParlay } from "./api";
 
 export interface MarketOption {
   value: string;
@@ -54,6 +54,10 @@ export interface SportConfig {
   dataJobs: string[];
   /** Líneas propias del deporte en el detalle de la sincronización. */
   syncLines: (meta: SportMeta) => string[];
+  /** Partidos y parlays del sistema de un día (/api/<deporte>/days/{fecha}): para páginas comunes. */
+  loadDay: (date: string) => Promise<{ games: SlateGame[]; parlays: SystemParlay[] }>;
+  /** Piernas de un día (/api/<deporte>/days/{fecha}/legs). */
+  loadLegs: (date: string) => Promise<Leg[]>;
 }
 
 export const SPORT_KEYS: SportKey[] = ["nba", "futbol"];

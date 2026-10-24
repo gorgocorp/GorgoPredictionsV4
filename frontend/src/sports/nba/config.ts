@@ -1,5 +1,6 @@
 import { lastWord, relativeTime } from "../../lib/format";
 import type { SportConfig } from "../../lib/sports";
+import { nbaApi } from "./api";
 
 /** Grupo de preferencias de cada estadística de jugador: los combinados van juntos. */
 const STAT_GROUP_OF: Record<string, string> = {
@@ -90,4 +91,6 @@ export const NBA: SportConfig = {
   syncLines: (m) => [
     `Reporte de lesiones NBA: ${m.last_injury_report_at ? relativeTime(m.last_injury_report_at) : "sin reporte (pretemporada)"}`,
   ],
+  loadDay: nbaApi.day,
+  loadLegs: nbaApi.legs,
 };

@@ -5,7 +5,7 @@ import { api, ApiError } from "../lib/api";
 import { oddFor } from "../lib/books";
 import { ceilOdd } from "../lib/builder";
 import { american, money, orList, pct, signedPct } from "../lib/format";
-import { impliedProbability, legValue, parseOdds, verdict, type LegValue } from "../lib/oddsInput";
+import { impliedProbability, legValue, parseOdds, verdict } from "../lib/oddsInput";
 import { summarize, summarizeSingles } from "../lib/parlay";
 import { commonPreferences, useCommonPreferences } from "../lib/preferences";
 import { useViewer } from "../lib/session";
@@ -13,26 +13,7 @@ import { bookKey, slip, slipMode, stakeOf, useSlip, type SlipMode } from "../lib
 import { SPORTS } from "../lib/sports";
 import { Spinner } from "./States";
 import { useToast } from "./Toast";
-
-const VALUE: Record<LegValue, { label: string; className: string; title: string }> = {
-  value: { label: "Valor", className: "badge-won", title: "Tu casa paga más que el momio justo del modelo y del mercado" },
-  model_only: {
-    label: "Sólo el modelo",
-    className: "badge-warn",
-    title: "El modelo ve valor y el mercado no: cuando no coinciden, el resultado suele quedar más cerca del mercado",
-  },
-  market_only: {
-    label: "Sólo el mercado",
-    className: "badge-neutral",
-    title: "Tu casa paga más que el momio justo del mercado, pero el modelo no ve valor",
-  },
-  none: { label: "Sin valor", className: "badge-neutral", title: "Tu casa paga menos que el momio justo del modelo y del mercado" },
-  no_market: {
-    label: "Sin mercado",
-    className: "badge-neutral",
-    title: "Ninguna casa cotiza este mercado completo: sólo está la opinión del modelo",
-  },
-};
+import { ValueBadge } from "./ValueBadge";
 
 /** Desde aquí el boleto avisa que un parlay largo acumula la comisión de la casa en cada pierna. */
 const LONG_PARLAY = 4;
@@ -313,11 +294,7 @@ function SlipBody({ bookmaker, apiBooks, onClose }: { bookmaker: string; apiBook
                         <span style={{ color: "var(--lost)" }}> · momio no válido</span>
                       ) : null}
                     </span>
-                    {l.value && (
-                      <span className={`badge ${VALUE[l.value].className}`} title={VALUE[l.value].title}>
-                        {VALUE[l.value].label}
-                      </span>
-                    )}
+                    {l.value && <ValueBadge value={l.value} />}
                   </span>
                   <span className="slip-market xs num muted">{marketText(l.pMarket)}</span>
                   {singles && (

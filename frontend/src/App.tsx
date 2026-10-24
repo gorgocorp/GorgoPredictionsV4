@@ -5,6 +5,7 @@ import { isAdmin, useSessionQuery, ViewerProvider } from "./lib/session";
 import { RESULTS_PATH } from "./lib/results";
 import { lastSport, useSportTheme } from "./lib/sportContext";
 import { AccountPage } from "./pages/AccountPage";
+import { CalculatorPage } from "./pages/CalculatorPage";
 import { FeaturedPage } from "./pages/FeaturedPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -59,6 +60,7 @@ export function App() {
           <Route path="/mis-apuestas" element={<MyBetsPage />} />
           <Route path="/rendimiento" element={<PerformancePage />} />
           <Route path="/cuenta" element={<AccountPage />} />
+          {isAdmin(viewer) && <Route path="/calculadora" element={<CalculatorPage />} />}
           {isAdmin(viewer) && <Route path="/usuarios" element={<UsersPage />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

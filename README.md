@@ -189,6 +189,11 @@ Un parlay diario por deporte de 2 piernas en las que el momio de Bet365 paga má
 mide con resultados y con el CLV de sus piernas. Sólo lo ve admin (página del día, Historial y Rendimiento) hasta que
 la prueba decida: regla, evidencia y criterio en `docs/MODELOS.md`.
 
+**Calculadora Caliente** (`/calculadora`, sólo admin): parte del parlay con valor del día; en cada partido se escoge la
+línea que ofrece Caliente (no está en la API) y se escriben sus momios. Con la misma regla que el boleto (hay valor si
+paga más que el momio justo del modelo y del mercado) recomienda meter el parlay, una sola pierna o nada, y lo carga al
+boleto con esos momios. No escribe nada ni toca la prueba: lo que se mete se mide aparte, en Mis apuestas.
+
 ## Momios de publicación, cierre y CLV
 
 - **Casas que se guardan en cada pierna** (`PRICE_BOOKMAKERS`): Bet365 (`BOOKMAKER`: con ella el sistema registra

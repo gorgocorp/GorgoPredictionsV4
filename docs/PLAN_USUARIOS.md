@@ -19,7 +19,7 @@ herramientas del navegador. Lo que la interfaz muestra difuminado es relleno gen
 | Descargar CSV del historial | 🔒 | ✅ | ✅ |
 | Rendimiento y CLV | ✅ | ✅ | ✅ |
 | Mis apuestas (cada quien las suyas; parlay o individuales) | ✅ sólo con piernas que ve | ✅ | ✅ |
-| Parlay con valor (en prueba: página del día, Historial y Rendimiento) | — | — | ✅ |
+| Parlay con valor (en prueba: página del día, Historial y Rendimiento) y Calculadora Caliente | — | — | ✅ |
 | Recalcular, marcar bajas | — | — | ✅ |
 | Usuarios (crear, plan, vencimiento, contraseña, desactivar) | — | — | ✅ |
 
